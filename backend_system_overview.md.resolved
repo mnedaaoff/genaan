@@ -1,0 +1,115 @@
+# Genaan E-Commerce: System Architecture & API Blueprint
+
+This document serves as a complete structural overview of the **Genaan** administrative backend and E-Commerce platform architecture. It is designed to be fully reproducible when binding a front-end interface, deploying a headless system, or porting core operations to another project.
+
+---
+
+## 1. Technology Stack
+* **Framework:** Laravel (PHP)
+* **Design Pattern:** MVC (Model-View-Controller)
+* **Frontend Tools (Admin):** Blade Templating Engine, TailwindCSS via CDN, Chart.js, Google Material Icons.
+* **Database:** MySQL relational tracking.
+
+---
+
+## 2. Database Schema (Schema Topography)
+
+The database spans heavily typed relational tables mapped precisely for complex e-commerce functions.
+
+### Core User & Access Hierarchy
+* `users`: Defines authenticatable properties, extended with basic tracking (`is_admin`, `last_login_at`, `provider`).
+* `roles` & `user_roles`: Pivot mapping allowing multi-dimensional privilege bindings.
+* `addresses`: Relates back to a `user_id` mapping normalized location delivery data and `is_default` booleans.
+
+### Operational Catalog
+* `categories`: Hierarchical (`parent_id`) allowing deeply nested parent/child relationships.
+* `products`: Base catalog items. Constrained by literal specific `enum('type')` variants: `plant`, `pot`, `soil`, `vitamin`, `accessory`.
+* `product_variants`: Optional pricing and explicit base stock overrides.
+* `product_attributes`: Dynamic key-value descriptors (`attribute_key`, `attribute_value`).
+* `product_images`: 1:Many relationships allowing carousel galleries.
+* `plant_care`: Dedicated AI/UI helper schema parsing optimal `watering_days`, `light_level`, and `humidity_level`.
+
+### Inventory State Engine
+* `inventory`: Central ledger tying `product_id`/`variant_id` to current `quantity` offsets and actively `reserved` (e.g. frozen in checkout) quantities.
+* `inventory_logs`: Time-series ledger marking every physical movement with an enum `type` (`in`, `out`, `reserve`, `release`, `adjustment`).
+
+### Cart & Checkout Matrix
+* `carts` & `cart_items`: Volatile session-ledgers mapping to `user_id` bounds.
+* `orders`: Generates immutable checkout footprints recording `subtotal`, `discount`, `total`, `status`, and `payment_status` mapping linearly to an `address_id` state.
+* `order_items`: Maps literal finalized prices bridging product gaps securely.
+* `order_events`: Extensible hook registering post-purchase timelines (e.g., dispatched, in-transit webhooks).
+
+### Engagement & Marketing
+* `coupons`: Marketing layer evaluating percent/fixed constraints conditionally mapped through total usage ceilings and `min_order` gates.
+* `reviews`: 1->5 stars relational binding traversing user and product models explicitly.
+* `posts`: CMS binding facilitating article or blog broadcasts directly onto the storefront.
+
+### System Globals & Insight Tracking
+* `settings`: Agnostic application key-value pair strings regulating UI logic operations (e.g., `stock_alert_threshold`, `currency`).
+* `audit_logs` & `analytics_events`: Traceability arrays bridging custom UX tracking and security tracking metadata.
+
+---
+
+## 3. Server Logic & API Controllers
+
+The administration layer utilizes singular `ManagementControllers` mapping to specific database responsibilities seamlessly integrating metrics computation.
+
+### `DashboardController`
+Serves as the highest-level operational read-node. Centralizes cross-functional metrics.
+* **Retrieves:** Total revenue constraints (where paid), global user footprint counts, and active order counts.
+* **Analytics Compute:** Pipes JSON array groupings formatting `Activity Logs`, `Sales By Day` 30-day lookbacks, and dynamic `Top Product` matrix revenue comparisons grouped by `SUM(oi.quantity * p.price)`.
+
+### `ProductManagementController`
+Curates the entire retail catalog layer while securely cross-calculating inventory counts.
+* Executes index filtering with `like` matchings mapping names or scientific identities.
+* Aggregates live unfulfilled quantities evaluating against dynamic `settings` thresholds, exposing instant low-stock indicators to admins.
+
+### `InventoryManagementController` / `ProcurementController`
+Tracks inbound/outbound financial metrics.
+* Uses aggregate SQL triggers grouping `Stock Inventory Counts -> Category Bounds`.
+* Provides placeholder evaluation UI bounds exposing forecasted budget allocation formulas and "Supplier Fulfillment" percentages based purely on logic matrices.
+
+### `OrderManagementController`
+* Maps REST interfaces tracking state machine changes. Captures `PUT /orders/{id}/status` payloads safely converting state from `pending -> confirmed -> shipped`. 
+
+### `CustomerManagementController`
+* Queries `users` securely enforcing UI limits to `is_admin = false`. 
+* Uses advanced select operations running `DB::table('orders')->selectRaw()` grouping lifetime spends and indexing them immediately to the users array.
+
+### `SupportChatController`
+Handles the backend synchronization of a live user/admin inbox framework.
+* Fetches relational message cascades conditionally parsing ascending timestamps.
+* Exposes functional action targets marking thread reads globally.
+
+### `SettingsManagementController`
+Handles the platform configurations explicitly writing rows via un-restricted loops against `Setting::updateOrCreate()`. Handles secure password resetting validation bounds securely isolated from settings keys.
+
+---
+
+## 4. Frontend Route Definitions (Web REST Interfaces)
+
+The HTTP pathways are statically shielded by global `auth` and `admin` middleware gates isolating data bounds globally.
+
+* **Overview & Aggregation:**
+  * `GET /admin/dashboard`: Global aggregation core matrix routing. (Legacy points `/admin/analytics` safely 301 redirected here).
+
+* **Inventory & Catalog Flow:**
+  * `GET /admin/products`: Base catalog listing and active stock thresholds. (Legacy points `/admin/inventory` safely 301 redirected here).
+  * `GET/POST /admin/products/create`: Standardized form handler initializing basic elements and mapping dynamic slugs implicitly.
+  * `PUT/DELETE /admin/products/{product}`: Item update routines.
+  * `GET /admin/procurement`: Forecast tracking UI.
+
+* **Fulfillment Flow:**
+  * `GET /admin/orders`: Global order tracker.
+  * `GET /admin/orders/{id}`: Detailed transaction receipt rendering item and address bindings.
+  * `PUT /admin/orders/{id}/status`: Mutation endpoint locking transaction stages securely.
+
+* **Customer Operations Flow:**
+  * `GET /admin/customers`: User query layer sorting lifetime conversion margins.
+  * `GET/POST/DELETE /admin/coupons`: Complete marketing creation tools toggling active boolean states.
+  * `GET/POST /admin/chats`: Conversation listener bridging real-time text replies back to user profiles.
+  
+* **Configuration Flow:**
+  * `GET /admin/settings`: Settings read pipeline.
+  * `POST /admin/settings`: General configuration updates logic trigger.
+  * `POST /admin/settings/password`: Authorized password rotation handler.
