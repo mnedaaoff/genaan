@@ -14,14 +14,14 @@ export default function ProductsPage() {
 
   const filtered = mockProducts.filter(p => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.scientific_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
-    const matchType   = typeFilter === "all" || p.type === typeFilter;
+    const matchType = typeFilter === "all" || p.type === typeFilter;
     return matchSearch && matchType;
   });
 
   const stockBadge = (p: Product) => {
     const avail = p.inventory?.available ?? 0;
     if (avail === 0) return <Badge variant="red" dot>Out of Stock</Badge>;
-    if (avail <= 5)  return <Badge variant="yellow" dot>Low Stock ({avail})</Badge>;
+    if (avail <= 5) return <Badge variant="yellow" dot>Low Stock ({avail})</Badge>;
     return <Badge variant="green" dot>In Stock ({avail})</Badge>;
   };
 
@@ -31,8 +31,8 @@ export default function ProductsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-2 flex-1">
           <div className="relative flex-1 max-w-xs">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8aab99]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input type="search" placeholder="Search name or species…" value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]"/>
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8aab99]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+            <input type="search" placeholder="Search name or species…" value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]" />
           </div>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-[#d4ded7] bg-white text-sm text-[#5f786c] focus:outline-none focus:border-[#17583a]">
             <option value="all">All Types</option>
@@ -64,7 +64,7 @@ export default function ProductsPage() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-[#f0f2ee] flex-shrink-0">
-                        {p.images?.[0]?.url && <Image src={p.images[0].url} alt={p.name} fill className="object-cover"/>}
+                        {p.images?.[0]?.url && <Image src={p.images[0].url} alt={p.name} fill className="object-cover" />}
                       </div>
                       <div>
                         <p className="font-semibold text-[#0d3a24] leading-tight">{p.name}</p>
@@ -76,7 +76,7 @@ export default function ProductsPage() {
                     <span className="capitalize text-[#5f786c] text-xs font-medium">{p.type}</span>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="font-bold text-[#0d3a24]">�EGP {p.price.toFixed(2)}</span>
+                    <span className="font-bold text-[#0d3a24]">EGP {p.price.toFixed(2)}</span>
                   </td>
                   <td className="px-4 py-3.5">{stockBadge(p)}</td>
                   <td className="px-4 py-3.5">
@@ -110,7 +110,7 @@ export default function ProductsPage() {
       {/* Delete confirmation modal */}
       {deleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setDeleteId(null)}/>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setDeleteId(null)} />
           <div className="relative bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full animate-fade-in">
             <h3 className="text-lg font-heading font-bold text-[#0d3a24]">Delete Product?</h3>
             <p className="mt-2 text-sm text-[#5f786c]">This action cannot be undone. The product and all its variants will be permanently removed.</p>

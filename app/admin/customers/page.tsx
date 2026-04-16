@@ -14,13 +14,13 @@ export default function CustomersPage() {
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <p className="text-xs font-semibold tracking-[0.1em] uppercase text-[#8aab99]">Avg. Lifetime Value</p>
           <p className="text-3xl font-heading font-black text-[#0d3a24] mt-2">
-            ÂEGP {Math.round(mockCustomers.reduce((s, c) => s + c.lifetime_spend, 0) / mockCustomers.length).toLocaleString()}
+            EGP {Math.round(mockCustomers.reduce((s, c) => s + c.lifetime_spend, 0) / mockCustomers.length).toLocaleString()}
           </p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <p className="text-xs font-semibold tracking-[0.1em] uppercase text-[#8aab99]">Total Revenue</p>
           <p className="text-3xl font-heading font-black text-[#17583a] mt-2">
-            ÂEGP {mockCustomers.reduce((s, c) => s + c.lifetime_spend, 0).toLocaleString()}
+            EGP {mockCustomers.reduce((s, c) => s + c.lifetime_spend, 0).toLocaleString()}
           </p>
         </div>
       </div>
@@ -30,8 +30,8 @@ export default function CustomersPage() {
         <div className="px-5 py-4 border-b border-[#e4ece7] flex items-center justify-between">
           <h2 className="text-base font-heading font-bold text-[#0d3a24]">All Customers</h2>
           <div className="relative max-w-xs">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8aab99]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input type="search" placeholder="Search customersâ€¦" className="pl-9 pr-3 py-2 rounded-lg border border-[#d4ded7] bg-[#fafafa] text-sm focus:outline-none focus:border-[#17583a]"/>
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8aab99]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+            <input type="search" placeholder="Search customersâ€¦" className="pl-9 pr-3 py-2 rounded-lg border border-[#d4ded7] bg-[#fafafa] text-sm focus:outline-none focus:border-[#17583a]" />
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -63,7 +63,7 @@ export default function CustomersPage() {
                     <span className="font-bold text-[#0d3a24]">{c.total_orders}</span>
                   </td>
                   <td className="px-4 py-3.5 text-right">
-                    <span className="font-bold text-[#17583a]">ÂEGP {c.lifetime_spend.toLocaleString()}</span>
+                    <span className="font-bold text-[#17583a]">EGP {c.lifetime_spend.toLocaleString()}</span>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-[#5f786c]">
                     {c.last_order_at ? new Date(c.last_order_at).toLocaleDateString("en-GB") : "â€”"}
