@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { settings as settingsApi } from "../../../lib/api";
+import { settings as settingsApi } from "../../lib/api";
 
 export default function PrivacyPolicyPage() {
   const [content, setContent] = useState<string>("Loading...");
