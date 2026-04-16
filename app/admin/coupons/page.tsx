@@ -71,9 +71,9 @@ export default function CouponsPage() {
                   </td>
                   <td className="px-4 py-3.5 capitalize text-[#5f786c]">{c.type}</td>
                   <td className="px-4 py-3.5 font-bold text-[#17583a]">
-                    {c.type === "percent" ? `${c.value}%` : `ÂEGP ${c.value}`}
+                    {c.type === "percent" ? `${c.value}%` : `EGP ${c.value}`}
                   </td>
-                  <td className="px-4 py-3.5 text-[#5f786c]">{c.min_order ? `ÂEGP ${c.min_order}` : "â€”"}</td>
+                  <td className="px-4 py-3.5 text-[#5f786c]">{c.min_order ? `EGP ${c.min_order}` : "â€”"}</td>
                   <td className="px-4 py-3.5">
                     <span className="text-[#5f786c]">{c.uses_count}</span>
                     {c.max_uses && <span className="text-[#c4d5cc]"> / {c.max_uses}</span>}
@@ -83,7 +83,7 @@ export default function CouponsPage() {
                       onClick={() => toggleActive(c.id)}
                       className={`relative w-9 h-5 rounded-full transition-colors ${c.is_active ? "bg-[#17583a]" : "bg-[#d4ded7]"}`}
                     >
-                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${c.is_active ? "translate-x-4" : "translate-x-0.5"}`}/>
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${c.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
                     </button>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-[#8aab99]">
@@ -102,11 +102,11 @@ export default function CouponsPage() {
       {/* Create modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreate(false)}/>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
           <div className="relative bg-white rounded-2xl p-6 shadow-xl max-w-md w-full animate-fade-in">
             <h3 className="text-lg font-heading font-bold text-[#0d3a24] mb-4">Create Coupon</h3>
             <form onSubmit={handleCreate} className="space-y-4">
-              <Input id="coupon_code" label="Code" placeholder="SUMMER25" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} required/>
+              <Input id="coupon_code" label="Code" placeholder="SUMMER25" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} required />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-1.5">Type</label>
@@ -115,13 +115,13 @@ export default function CouponsPage() {
                     <option value="fixed">Fixed Amount</option>
                   </select>
                 </div>
-                <Input id="coupon_value" label={form.type === "percent" ? "Discount %" : "Discount ÂEGP "} type="number" min="1" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} required/>
+                <Input id="coupon_value" label={form.type === "percent" ? "Discount %" : "Discount EGP "} type="number" min="1" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} required />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Input id="coupon_min" label="Min Order ÂEGP " type="number" value={form.min_order} onChange={e => setForm(f => ({ ...f, min_order: e.target.value }))}/>
-                <Input id="coupon_max_uses" label="Max Uses" type="number" value={form.max_uses} onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))}/>
+                <Input id="coupon_min" label="Min Order EGP " type="number" value={form.min_order} onChange={e => setForm(f => ({ ...f, min_order: e.target.value }))} />
+                <Input id="coupon_max_uses" label="Max Uses" type="number" value={form.max_uses} onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))} />
               </div>
-              <Input id="coupon_expires" label="Expires (optional)" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))}/>
+              <Input id="coupon_expires" label="Expires (optional)" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
               <div className="flex gap-3 mt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="flex-1 py-2.5 border border-[#d4ded7] text-sm font-semibold text-[#5f786c] rounded-lg hover:border-[#8aab99] transition-colors">Cancel</button>
                 <Button type="submit" loading={saving} fullWidth={false} className="flex-1">Create</Button>
@@ -134,7 +134,7 @@ export default function CouponsPage() {
       {/* Delete modal */}
       {deleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setDeleteId(null)}/>
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setDeleteId(null)} />
           <div className="relative bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full animate-fade-in">
             <h3 className="text-lg font-heading font-bold text-[#0d3a24]">Delete Coupon?</h3>
             <p className="mt-2 text-sm text-[#5f786c]">This coupon will no longer be redeemable by customers.</p>
