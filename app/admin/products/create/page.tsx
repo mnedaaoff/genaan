@@ -7,7 +7,7 @@ import { Input, Textarea } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 
 const PRODUCT_TYPES = ["plant", "pot", "soil", "vitamin", "accessory"] as const;
-const LIGHT_LEVELS   = ["low", "medium", "bright", "direct"] as const;
+const LIGHT_LEVELS = ["low", "medium", "bright", "direct"] as const;
 const HUMIDITY_LEVELS = ["low", "medium", "high"] as const;
 
 export default function CreateProductPage() {
@@ -64,10 +64,10 @@ export default function CreateProductPage() {
         <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
           <h2 className="text-base font-heading font-bold text-[#0d3a24]">Basic Information</h2>
           <div className="grid grid-cols-2 gap-4">
-            <Input id="product_name" label="Product Name" placeholder="e.g. ZZ Sentinel" value={form.name} onChange={set("name")} required/>
-            <Input id="product_slug" label="Slug (auto)" placeholder="zz-sentinel" value={form.slug} onChange={set("slug")}/>
+            <Input id="product_name" label="Product Name" placeholder="e.g. ZZ Sentinel" value={form.name} onChange={set("name")} required />
+            <Input id="product_slug" label="Slug (auto)" placeholder="zz-sentinel" value={form.slug} onChange={set("slug")} />
           </div>
-          <Input id="product_scientific" label="Scientific Name (optional)" placeholder="e.g. Zamioculcas zamiifolia" value={form.scientific_name} onChange={set("scientific_name")}/>
+          <Input id="product_scientific" label="Scientific Name (optional)" placeholder="e.g. Zamioculcas zamiifolia" value={form.scientific_name} onChange={set("scientific_name")} />
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-1.5">Product Type</label>
@@ -75,18 +75,18 @@ export default function CreateProductPage() {
                 {PRODUCT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
             </div>
-            <Input id="product_price" label="Price (�EGP )" type="number" placeholder="0.00" min="0" step="0.01" value={form.price} onChange={set("price")} required/>
+            <Input id="product_price" label="Price (EGP )" type="number" placeholder="0.00" min="0" step="0.01" value={form.price} onChange={set("price")} required />
           </div>
           <div>
             <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-1.5">Description</label>
-            <Textarea id="product_description" placeholder="Describe the product…" value={form.description} onChange={set("description")}/>
+            <Textarea id="product_description" placeholder="Describe the product…" value={form.description} onChange={set("description")} />
           </div>
         </div>
 
         {/* Inventory */}
         <div className="bg-white rounded-2xl p-6 shadow-sm">
           <h2 className="text-base font-heading font-bold text-[#0d3a24] mb-4">Initial Inventory</h2>
-          <Input id="product_stock" label="Starting Stock Quantity" type="number" min="0" value={form.stock} onChange={set("stock")}/>
+          <Input id="product_stock" label="Starting Stock Quantity" type="number" min="0" value={form.stock} onChange={set("stock")} />
         </div>
 
         {/* Plant Care */}
@@ -94,7 +94,7 @@ export default function CreateProductPage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="text-base font-heading font-bold text-[#0d3a24]">Plant Care</h2>
             <div className="grid grid-cols-3 gap-4">
-              <Input id="product_watering" label="Watering (days)" type="number" min="1" value={form.watering_days} onChange={set("watering_days")}/>
+              <Input id="product_watering" label="Watering (days)" type="number" min="1" value={form.watering_days} onChange={set("watering_days")} />
               <div>
                 <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-1.5">Light Level</label>
                 <select id="product_light" value={form.light_level} onChange={set("light_level")} className="w-full px-4 py-3 rounded-lg border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]">
@@ -120,8 +120,8 @@ export default function CreateProductPage() {
           <div className="space-y-3">
             {attributes.map((attr, i) => (
               <div key={i} className="flex gap-3 items-center">
-                <Input label="" placeholder="Key (e.g. Height)" value={attr.key} onChange={e => setAttr(i, "key", e.target.value)} className="flex-1"/>
-                <Input label="" placeholder="Value (e.g. 60cm)" value={attr.value} onChange={e => setAttr(i, "value", e.target.value)} className="flex-1"/>
+                <Input label="" placeholder="Key (e.g. Height)" value={attr.key} onChange={e => setAttr(i, "key", e.target.value)} className="flex-1" />
+                <Input label="" placeholder="Value (e.g. 60cm)" value={attr.value} onChange={e => setAttr(i, "value", e.target.value)} className="flex-1" />
                 <button type="button" onClick={() => removeAttr(i)} className="text-[#c4d5cc] hover:text-red-400 transition-colors mt-0.5">✕</button>
               </div>
             ))}

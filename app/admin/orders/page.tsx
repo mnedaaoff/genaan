@@ -7,18 +7,18 @@ import { Badge } from "../../components/ui/Badge";
 import type { Order, OrderStatus } from "../../lib/types";
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; variant: "yellow" | "blue" | "purple" | "green" | "red" }> = {
-  pending:   { label: "Pending",   variant: "yellow" },
-  confirmed: { label: "Confirmed", variant: "blue"   },
-  shipped:   { label: "Shipped",   variant: "purple" },
-  delivered: { label: "Delivered", variant: "green"  },
-  cancelled: { label: "Cancelled", variant: "red"    },
+  pending: { label: "Pending", variant: "yellow" },
+  confirmed: { label: "Confirmed", variant: "blue" },
+  shipped: { label: "Shipped", variant: "purple" },
+  delivered: { label: "Delivered", variant: "green" },
+  cancelled: { label: "Cancelled", variant: "red" },
 };
 
 const TABS: { label: string; status: OrderStatus | "all" }[] = [
-  { label: "All",       status: "all"       },
-  { label: "Pending",   status: "pending"   },
+  { label: "All", status: "all" },
+  { label: "Pending", status: "pending" },
   { label: "Confirmed", status: "confirmed" },
-  { label: "Shipped",   status: "shipped"   },
+  { label: "Shipped", status: "shipped" },
   { label: "Delivered", status: "delivered" },
 ];
 
@@ -49,11 +49,10 @@ export default function OrdersPage() {
           <button
             key={t.status}
             onClick={() => setTab(t.status)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              tab === t.status
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === t.status
                 ? "border-[#17583a] text-[#17583a]"
                 : "border-transparent text-[#8aab99] hover:text-[#5f786c]"
-            }`}
+              }`}
           >
             {t.label}
             {t.status !== "all" && (
@@ -96,8 +95,8 @@ export default function OrdersPage() {
                       <p className="text-xs text-[#8aab99]">{order.user?.email}</p>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className="font-bold text-[#0d3a24]">ÂEGP {order.total.toFixed(2)}</span>
-                      {order.discount > 0 && <span className="ml-1 text-[10px] text-[#17583a]">(-ÂEGP {order.discount})</span>}
+                      <span className="font-bold text-[#0d3a24]">EGP {order.total.toFixed(2)}</span>
+                      {order.discount > 0 && <span className="ml-1 text-[10px] text-[#17583a]">(-EGP {order.discount})</span>}
                     </td>
                     <td className="px-4 py-3.5"><Badge variant={sc.variant} dot>{sc.label}</Badge></td>
                     <td className="px-4 py-3.5">
