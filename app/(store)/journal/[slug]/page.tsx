@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { mockPosts } from "../../../lib/mock-data";
 import { notFound } from "next/navigation";
+import { posts } from "../../../lib/api";
 
 export default async function JournalPostPage({
   params,
@@ -9,10 +9,17 @@ export default async function JournalPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = mockPosts.find(p => p.slug === slug);
-  if (!post) notFound();
 
-  const related = mockPosts.filter(p => p.id !== post.id).slice(0, 3);
+  let post: any;
+  let related: any[] = [];
+
+  try {
+    post = await posts.get(slug);
+    const all = await posts.list();
+    related = all.filter((p: any) => p.id !== post.id).slice(0, 3);
+  } catch {
+    notFound();
+  }
 
   return (
     <div className="min-h-screen bg-[#f4f5f1]">

@@ -2,12 +2,51 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
+import { coupons as couponsApi } from "../../lib/api";
+
+/** Safely converts any value (including string from API) to a float */
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v ?? 0));
+  return isNaN(n) ? 0 : n;
+}
 
 export default function CartPage() {
   const { items, subtotal, incrementItem, decrementItem, removeItem, clearCart } = useCart();
   const { t } = useI18n();
+
+  // Coupon state
+  const [couponCode, setCouponCode]       = useState("");
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponError, setCouponError]     = useState("");
+  const [couponApplying, setCouponApplying] = useState(false);
+  const [couponApplied, setCouponApplied] = useState(false);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponApplying(true);
+    setCouponError("");
+    try {
+      const res: any = await couponsApi.apply(couponCode.trim(), subtotal);
+      setCouponDiscount(toNum(res?.discount ?? 0));
+      setCouponApplied(true);
+    } catch (err: any) {
+      setCouponError(err.message ?? "Invalid coupon code");
+      setCouponDiscount(0);
+      setCouponApplied(false);
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setCouponCode("");
+    setCouponDiscount(0);
+    setCouponApplied(false);
+    setCouponError("");
+  };
 
   if (items.length === 0) {
     return (
@@ -28,8 +67,8 @@ export default function CartPage() {
     );
   }
 
-  const shipping = subtotal >= 2000 ? 0 : 75;
-  const total = subtotal + shipping;
+  const shipping   = subtotal >= 2000 ? 0 : 75;
+  const finalTotal = Math.max(0, subtotal + shipping - couponDiscount);
 
   return (
     <div className="min-h-screen bg-[#f4f5f1] py-10">
@@ -42,7 +81,7 @@ export default function CartPage() {
         </div>
 
         <div className="grid lg:grid-cols-[1fr_340px] gap-6 items-start">
-          {/* Items */}
+          {/* Items list */}
           <div className="space-y-4">
             {items.map(item => (
               <div key={item.id} className="bg-white rounded-2xl p-4 flex gap-4 shadow-sm animate-fade-in">
@@ -51,9 +90,7 @@ export default function CartPage() {
                     <Image
                       src={item.product.images[0].url}
                       alt={item.product.name}
-                      fill
-                      className="object-cover"
-                      sizes="96px"
+                      fill className="object-cover" sizes="96px"
                     />
                   )}
                 </div>
@@ -64,38 +101,44 @@ export default function CartPage() {
                       <p className="text-xs text-[#8aab99] capitalize font-medium mt-0.5">{item.variant?.name ?? "Product"}</p>
                     </div>
                     <button
-                      onClick={() => removeItem(item.product.id)}
+                      onClick={() => removeItem(item.id)}
                       className="text-[#c4d5cc] hover:text-red-500 transition-colors shrink-0"
                       title={t.cart.remove}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
                       </svg>
                     </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center border border-[#e4ece7] rounded-lg overflow-hidden">
-                      <button onClick={() => decrementItem(item.product.id)} className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-[#f4f5f1] transition-colors text-lg leading-none">-</button>
+                      <button onClick={() => decrementItem(item.id)} className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-[#f4f5f1] transition-colors text-lg leading-none">-</button>
                       <span className="w-8 text-center text-sm font-semibold text-[#0d3a24] ltr-num">{item.quantity}</span>
-                      <button onClick={() => incrementItem(item.product.id)} className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-[#f4f5f1] transition-colors text-lg leading-none">+</button>
+                      <button onClick={() => incrementItem(item.id)} className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-[#f4f5f1] transition-colors text-lg leading-none">+</button>
                     </div>
-                    <span className="font-bold text-[#17583a] ltr-num">EGP {((item.product.price ?? 0) * item.quantity).toFixed(2)}</span>
+                    <span className="font-bold text-[#17583a] ltr-num">
+                      EGP {(toNum(item.product.price) * item.quantity).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Summary */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
-            <h2 className="font-heading font-bold text-[#0d3a24] mb-5">Order Summary</h2>
-            <div className="space-y-3 text-sm mb-6">
+          {/* Summary sidebar */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24 space-y-5">
+            <h2 className="font-heading font-bold text-[#0d3a24]">Order Summary</h2>
+
+            {/* Line items */}
+            <div className="space-y-2 text-sm">
               {items.map(item => (
                 <div key={item.id} className="flex justify-between text-[#5f786c]">
                   <span className="truncate flex-1">{item.product.name} x {item.quantity}</span>
-                  <span className="ltr-num ml-3 shrink-0">EGP {((item.product.price ?? 0) * item.quantity).toFixed(2)}</span>
+                  <span className="ltr-num ml-3 shrink-0">EGP {(toNum(item.product.price) * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
+
               <div className="border-t border-[#e4ece7] pt-3 flex justify-between text-[#5f786c]">
                 <span>Shipping</span>
                 <span className="ltr-num">{shipping === 0 ? "Free" : `EGP ${shipping.toFixed(2)}`}</span>
@@ -103,26 +146,74 @@ export default function CartPage() {
               {shipping > 0 && (
                 <p className="text-[10px] text-[#8aab99]">Free shipping on orders over EGP 2,000</p>
               )}
+
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-green-600 font-medium">
+                  <span>Coupon</span>
+                  <span className="ltr-num">-EGP {couponDiscount.toFixed(2)}</span>
+                </div>
+              )}
+
               <div className="border-t border-[#e4ece7] pt-3 flex justify-between font-bold text-[#0d3a24] text-base">
                 <span>Total</span>
-                <span className="ltr-num">EGP {total.toFixed(2)}</span>
+                <span className="ltr-num">EGP {finalTotal.toFixed(2)}</span>
               </div>
             </div>
-            <Link
-              href="/checkout"
-              className="block w-full py-4 bg-[#17583a] text-white text-center font-semibold rounded-xl hover:bg-[#195b36] transition-colors"
-            >
-              {t.cart.checkout}
-            </Link>
-            <Link
-              href="/shop"
-              className="block w-full py-3 mt-3 border border-[#d4ded7] text-center text-sm font-semibold text-[#5f786c] rounded-xl hover:border-[#17583a] transition-colors"
-            >
-              {t.cart.continue_shopping}
-            </Link>
-            <div className="flex items-center justify-center gap-2 mt-5 text-xs text-[#8aab99]">
+
+            {/* Coupon input */}
+            <div className="space-y-2">
+              {couponApplied ? (
+                <div className="flex items-center justify-between p-3 bg-[#e8f3ec] rounded-xl border border-[#c4ddd0]">
+                  <div className="flex items-center gap-2">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    <span className="text-sm font-semibold text-[#17583a]">{couponCode}</span>
+                    <span className="text-xs text-[#5f786c]">(-EGP {couponDiscount.toFixed(2)})</span>
+                  </div>
+                  <button onClick={removeCoupon} className="text-xs text-[#8aab99] hover:text-red-500 transition-colors">Remove</button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Coupon code"
+                      value={couponCode}
+                      onChange={e => { setCouponCode(e.target.value); setCouponError(""); }}
+                      onKeyDown={e => e.key === "Enter" && handleApplyCoupon()}
+                      className="flex-1 px-3 py-2.5 rounded-lg border border-[#d4ded7] text-sm focus:outline-none focus:border-[#17583a]"
+                    />
+                    <button
+                      onClick={handleApplyCoupon}
+                      disabled={couponApplying || !couponCode.trim()}
+                      className="px-4 py-2.5 bg-[#0d3a24] text-white text-sm font-semibold rounded-lg hover:bg-[#17583a] transition-colors disabled:opacity-40"
+                    >
+                      {couponApplying ? "..." : "Apply"}
+                    </button>
+                  </div>
+                  {couponError && <p className="text-xs text-red-500">{couponError}</p>}
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-3">
+              <Link
+                href="/checkout"
+                className="block w-full py-4 bg-[#17583a] text-white text-center font-semibold rounded-xl hover:bg-[#195b36] transition-colors"
+              >
+                {t.cart.checkout}
+              </Link>
+              <Link
+                href="/shop"
+                className="block w-full py-3 border border-[#d4ded7] text-center text-sm font-semibold text-[#5f786c] rounded-xl hover:border-[#17583a] transition-colors"
+              >
+                {t.cart.continue_shopping}
+              </Link>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 text-xs text-[#8aab99]">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-              Secure checkout - SSL encrypted
+              Secure checkout — SSL encrypted
             </div>
           </div>
         </div>

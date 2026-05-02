@@ -5,7 +5,6 @@ import { ProductsSection } from "./components/landing/ProductsSection";
 import { Navbar } from "./components/ui/Navbar";
 import { Footer } from "./components/ui/Footer";
 import { CartDrawer } from "./components/ui/CartDrawer";
-import { landingProducts } from "./components/landing/data";
 
 export default function Home() {
   return (
@@ -13,9 +12,12 @@ export default function Home() {
       <Navbar />
       <CartDrawer />
       <main className="flex-1">
+        {/* Full-width hero — no container */}
+        <HeroSection />
+
+        {/* Remaining sections with standard container */}
         <div className="mx-auto max-w-[1200px] px-5 md:px-8">
-          <HeroSection />
-          <ProductsSection products={landingProducts} />
+          <ProductsSection />
           <InnovationSection />
           <CommunitySection />
         </div>
@@ -24,3 +26,4 @@ export default function Home() {
     </>
   );
 }
+

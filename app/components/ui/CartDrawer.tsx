@@ -92,7 +92,7 @@ export function CartDrawer() {
                     <div className="flex justify-between items-start gap-2">
                       <h3 className="font-semibold text-[#0d3a24] text-sm leading-tight line-clamp-2 pr-4">{item.product.name}</h3>
                       <button
-                        onClick={() => removeItem(item.product.id)}
+                        onClick={() => removeItem(item.id)}
                         className="text-[#8aab99] hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100 -mr-2 -mt-2"
                         title="Remove item"
                       >
@@ -102,14 +102,14 @@ export function CartDrawer() {
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center bg-[#f4f5f1] rounded-lg border border-[#e4ece7]">
                         <button
-                          onClick={() => decrementItem(item.product.id)}
+                          onClick={() => decrementItem(item.id)}
                           className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-white hover:text-[#0d3a24] rounded-l-lg transition-colors"
                         >
                           -
                         </button>
                         <span className="w-8 text-center text-sm font-semibold text-[#0d3a24] ltr-num">{item.quantity}</span>
                         <button
-                          onClick={() => incrementItem(item.product.id)}
+                          onClick={() => incrementItem(item.id)}
                           className="w-8 h-8 flex items-center justify-center text-[#5f786c] hover:bg-white hover:text-[#0d3a24] rounded-r-lg transition-colors"
                         >
                           +
