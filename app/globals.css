@@ -68,7 +68,7 @@
   --color-green-700:      var(--green-700);
   --color-green-900:      var(--green-900);
   --font-sans:    "Inter", system-ui, sans-serif;
-  --font-heading: "Outfit", system-ui, sans-serif;
+  --font-heading: var(--font-fugaz), system-ui, sans-serif;
 }
 
 @layer base {
@@ -85,10 +85,10 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: "Outfit", system-ui, sans-serif;
-    font-weight: 700;
+    font-family: var(--font-fugaz), system-ui, sans-serif;
+    font-weight: 400;
     line-height: 1.1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
   }
 
   a { color: inherit; text-decoration: none; }
@@ -113,7 +113,7 @@
 }
 
 @layer utilities {
-  .font-heading { font-family: "Outfit", system-ui, sans-serif; }
+  .font-heading { font-family: var(--font-fugaz), system-ui, sans-serif; }
 
   /* Glass card */
   .glass {
@@ -205,7 +205,7 @@
 }
 
 [dir="rtl"] .font-heading {
-  font-family: "Cairo", "Outfit", sans-serif;
+  font-family: "Cairo", var(--font-fugaz), sans-serif;
 }
 
 /* Logical property helpers (start/end already handled by Tailwind) */

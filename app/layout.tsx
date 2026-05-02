@@ -33,6 +33,9 @@ export const metadata: Metadata = {
   description:
     "Experience the intersection of organic life and cutting-edge technology. Smart plants for a digital era.",
   keywords: ["plants", "indoor plants", "botanical", "smart plants", "Genaan"],
+  icons: {
+    icon: "/favicon.ico",
+  },
   openGraph: {
     title: "Genaan — Smart Plants for the Digital Era",
     description: "Experience organic life meets cutting-edge technology.",
@@ -53,6 +56,11 @@ export default function RootLayout({
     >
       <head>
         <LangScript />
+        <link
+          rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+          crossOrigin="anonymous"
+        />
       </head>
       <body className="min-h-full flex flex-col">
         <I18nProvider>

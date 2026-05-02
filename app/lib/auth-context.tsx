@@ -21,16 +21,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const TOKEN_KEY = "genaan_token";
 
-// ─── Mock admin user for demo ─────────────────────────────────────────────────
-const MOCK_ADMIN: User = {
-  id: 1, name: "Admin User", email: "admin@genaan.com",
-  is_admin: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2026-04-16T00:00:00Z",
-};
-const MOCK_USER: User = {
-  id: 12, name: "Jane Doe", email: "jane@genaan.com",
-  is_admin: false, created_at: "2025-06-01T00:00:00Z", updated_at: "2026-04-16T00:00:00Z",
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null, token: null, isLoading: true,
@@ -57,47 +47,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = useCallback(async (email: string, password: string) => {
-    if (!API_BASE) {
-      // Mock login
-      const mockUser = email === "admin@genaan.com" ? MOCK_ADMIN : MOCK_USER;
-      if (password.length < 6) throw new Error("Invalid credentials");
-      persist(mockUser, "mock_token_" + Date.now());
-      return;
-    }
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
+    const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? "Login failed");
+      throw new Error((err as any).message ?? "Login failed");
     }
     const { user, token } = await res.json();
     persist(user, token);
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    if (!API_BASE) {
-      persist({ ...MOCK_USER, name, email }, "mock_token_" + Date.now());
-      return;
-    }
-    const res = await fetch(`${API_BASE}/api/auth/register`, {
+    const res = await fetch(`${API_BASE}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? "Registration failed");
+      throw new Error((err as any).message ?? "Registration failed");
     }
     const { user, token } = await res.json();
     persist(user, token);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const stored = localStorage.getItem(TOKEN_KEY);
+    const token = stored ? JSON.parse(stored)?.token : null;
     localStorage.removeItem(TOKEN_KEY);
     setState({ user: null, token: null, isLoading: false });
+    // Fire-and-forget backend logout
+    if (API_BASE && token) {
+      fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {/* ignore */});
+    }
   }, []);
 
   return (

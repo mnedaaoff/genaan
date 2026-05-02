@@ -80,13 +80,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const closeCart  = useCallback(() => setIsOpen(false), []);
 
   const count    = items.reduce((s, i) => s + i.quantity, 0);
+
   const decrementItem = useCallback((itemId: number) => {
-    updateQty(itemId, -1);
-  }, [updateQty]);
+    setItems(prev => {
+      const item = prev.find(i => i.id === itemId);
+      if (!item) return prev;
+      if (item.quantity <= 1) return prev.filter(i => i.id !== itemId);
+      return prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i);
+    });
+  }, []);
 
   const incrementItem = useCallback((itemId: number) => {
-    updateQty(itemId, 1);
-  }, [updateQty]);
+    setItems(prev =>
+      prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity + 1 } : i)
+    );
+  }, []);
 
   const subtotal = items.reduce((sum, item) => sum + (item.product.price ?? 0) * item.quantity, 0);
 

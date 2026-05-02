@@ -34,26 +34,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#f4f5f1]">
+    <div className="min-h-[calc(100vh-4rem)] flex bg-[#f4f5f1]">
       {/* Left panel - photo */}
       <div className="hidden lg:block lg:w-[45%] relative bg-[#0d3a24] overflow-hidden">
         <Image
-          src="https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=1200&q=80"
+          src="/assets/register.png"
           alt="Plants"
           fill
           className="object-cover opacity-50"
           sizes="45vw"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0d3a24]/90 to-[#17583a]/40 flex flex-col justify-between p-12">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z"/>
-              </svg>
-            </div>
-            <span className="font-heading font-black text-xl text-white">genaan</span>
-          </Link>
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0d3a24]/90 to-[#17583a]/40 flex flex-col justify-start p-12">
+
           <div>
             <p className="text-white text-3xl font-heading font-bold mb-6 leading-tight">Start your green journey today.</p>
             <div className="space-y-3">
@@ -63,7 +56,7 @@ export default function RegisterPage() {
                 "30-day happiness guarantee",
               ].map(feat => (
                 <div key={feat} className="flex items-center gap-3 text-[#a8c7b6] text-sm">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ecb71" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ecb71" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
                   {feat}
                 </div>
               ))}
@@ -73,12 +66,12 @@ export default function RegisterPage() {
       </div>
 
       {/* Right panel - form */}
-      <div className="flex-1 flex flex-col justify-center px-6 py-12 lg:px-12">
+      <div className="flex-1 flex flex-col justify-start px-6 pt-10 pb-12 lg:px-12">
         <div className="mx-auto w-full max-w-sm">
           <Link href="/" className="flex items-center gap-2 mb-8 lg:hidden">
             <div className="w-8 h-8 rounded-lg bg-[#17583a] flex items-center justify-center">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z"/>
+                <path d="M12 22s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 8.2c0 7.3-8 11.8-8 11.8z" />
               </svg>
             </div>
             <span className="font-heading font-black text-xl text-[#0d3a24]">genaan</span>
@@ -92,7 +85,7 @@ export default function RegisterPage() {
 
           {error && (
             <div className="mb-5 p-3.5 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700 flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
               {error}
             </div>
           )}
@@ -105,27 +98,27 @@ export default function RegisterPage() {
               ].map(f => (
                 <div key={f.id}>
                   <label htmlFor={f.id} className="block text-[10px] font-bold tracking-[0.14em] uppercase text-[#5f786c] mb-1.5">{f.label}</label>
-                  <input id={f.id} type="text" value={form[f.field as keyof typeof form]} onChange={set(f.field)} placeholder={f.placeholder} required className="w-full px-3 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]"/>
+                  <input id={f.id} type="text" value={form[f.field as keyof typeof form]} onChange={set(f.field)} placeholder={f.placeholder} required className="w-full px-3 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]" />
                 </div>
               ))}
             </div>
 
             <div>
               <label htmlFor="reg_email" className="block text-[10px] font-bold tracking-[0.14em] uppercase text-[#5f786c] mb-1.5">{t.auth.email}</label>
-              <input id="reg_email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" required className="w-full px-4 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]"/>
+              <input id="reg_email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" required className="w-full px-4 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]" />
             </div>
 
             <div>
               <label htmlFor="reg_phone" className="block text-[10px] font-bold tracking-[0.14em] uppercase text-[#5f786c] mb-1.5">{t.auth.phone}</label>
               <div className="flex">
                 <span className="flex items-center px-3.5 rounded-s-xl border border-e-0 border-[#d4ded7] bg-[#f4f5f1] text-sm text-[#5f786c] font-medium shrink-0">+20</span>
-                <input id="reg_phone" type="tel" value={form.phone} onChange={set("phone")} placeholder="01XXXXXXXXX" className="flex-1 px-4 py-3 rounded-e-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]"/>
+                <input id="reg_phone" type="tel" value={form.phone} onChange={set("phone")} placeholder="01XXXXXXXXX" className="flex-1 px-4 py-3 rounded-e-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]" />
               </div>
             </div>
 
             <div>
               <label htmlFor="reg_password" className="block text-[10px] font-bold tracking-[0.14em] uppercase text-[#5f786c] mb-1.5">{t.auth.password}</label>
-              <input id="reg_password" type="password" value={form.password} onChange={set("password")} placeholder="••••••••" required minLength={8} className="w-full px-4 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]"/>
+              <input id="reg_password" type="password" value={form.password} onChange={set("password")} placeholder="••••••••" required minLength={8} className="w-full px-4 py-3 rounded-xl border border-[#d4ded7] bg-white text-sm focus:outline-none focus:border-[#17583a]" />
             </div>
 
             <button
@@ -135,7 +128,7 @@ export default function RegisterPage() {
               className="w-full py-4 bg-[#17583a] text-white font-bold rounded-xl hover:bg-[#195b36] transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
             >
               {loading ? (
-                <><svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/><path d="M21 12a9 9 0 00-9-9"/></svg> Creating account...</>
+                <><svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25" /><path d="M21 12a9 9 0 00-9-9" /></svg> Creating account...</>
               ) : t.auth.register_btn}
             </button>
           </form>

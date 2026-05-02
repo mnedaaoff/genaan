@@ -11,6 +11,12 @@ import type { Product } from "../../lib/types";
 const CATEGORIES = ["all", "plant", "pot", "soil", "vitamin", "accessory"] as const;
 type Category = typeof CATEGORIES[number];
 
+/** Safely convert any value to a float — avoids "toFixed is not a function" */
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v ?? 0));
+  return isNaN(n) ? 0 : n;
+}
+
 export default function ShopPage() {
   const { addItem, isCartOpen, openCart } = useCart();
   const { t } = useI18n();
@@ -43,7 +49,7 @@ export default function ShopPage() {
   return (
     <div className="bg-[#f4f5f1] min-h-screen">
       {/* Header */}
-      <div className="bg-[#17583a] py-16 px-5 text-center px-4">
+      <div className="bg-[#17583a] py-16 px-5 text-center">
         <h1 className="text-4xl md:text-5xl font-heading font-black text-white mb-4 animate-fade-in">{t.shop.title}</h1>
         <p className="text-[#a8c7b6] max-w-lg mx-auto text-sm animate-fade-in">{t.shop.subtitle}</p>
       </div>
@@ -121,7 +127,7 @@ export default function ShopPage() {
                   <p className="text-xs text-[#8aab99] capitalize mb-3 font-semibold tracking-wider">{t.shop.categories?.[product.type as Category] || product.type}</p>
                   
                   <div className="mt-auto flex items-center justify-between">
-                    <span className="font-bold text-[#17583a] ltr-num">EGP {product.price.toFixed(2)}</span>
+                    <span className="font-bold text-[#17583a] ltr-num">EGP {toNum(product.price).toFixed(2)}</span>
                     <button
                       onClick={() => {
                         addItem(product);
