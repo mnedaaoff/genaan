@@ -16,7 +16,7 @@ export function ProductsSection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    productsApi.list({ per_page: 4 })
+    productsApi.list({ page: 1 })
       .then(res => setProducts(res.data?.slice(0, 4) ?? []))
       .catch(() => setProducts([]))
       .finally(() => setLoading(false));
