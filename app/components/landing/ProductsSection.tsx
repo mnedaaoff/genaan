@@ -27,6 +27,7 @@ export function ProductsSection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+<<<<<<< HEAD
     async function fetchProducts() {
       const { data, error } = await supabase
         .from("products")
@@ -48,6 +49,12 @@ export function ProductsSection() {
       setLoading(false);
     }
     fetchProducts();
+=======
+    productsApi.list({ page: 1 })
+      .then(res => setProducts(res.data?.slice(0, 4) ?? []))
+      .catch(() => setProducts([]))
+      .finally(() => setLoading(false));
+>>>>>>> 42e8b631b2c91874fea74466edfce58713965eca
   }, []);
 
   const handleAdd = (p: Product) => {
