@@ -27,34 +27,42 @@ export function ProductsSection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-<<<<<<< HEAD
     async function fetchProducts() {
-      const { data, error } = await supabase
-        .from("products")
-        .select(`
-          id, name, description, price, compare_at_price, type, category_id, is_active, rating_avg,
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select(`
+          id,
+          name,
+          description,
+          price,
+          compare_at_price,
+          type,
+          category_id,
+          is_active,
+          rating_avg,
           product_images (url, is_primary),
           inventory (quantity, reserved)
         `)
-        .eq("is_active", true)
-        .order("rating_avg", { ascending: false })
-        .limit(4);
+          .eq("is_active", true)
+          .order("rating_avg", { ascending: false })
+          .limit(4);
 
-      if (error) {
-        console.warn("Products fetch error:", error.message);
+        if (error) {
+          console.warn("Products fetch error:", error.message);
+          setProducts([]);
+        } else {
+          setProducts((data ?? []) as unknown as Product[]);
+        }
+      } catch (err) {
+        console.error(err);
         setProducts([]);
-      } else {
-        setProducts((data ?? []) as unknown as Product[]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
+
     fetchProducts();
-=======
-    productsApi.list({ page: 1 })
-      .then(res => setProducts(res.data?.slice(0, 4) ?? []))
-      .catch(() => setProducts([]))
-      .finally(() => setLoading(false));
->>>>>>> 42e8b631b2c91874fea74466edfce58713965eca
   }, []);
 
   const handleAdd = (p: Product) => {
@@ -113,7 +121,7 @@ export function ProductsSection() {
         >
           {t.products_section.view_all}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d={isRTL ? "M19 12H5M12 19l-7-7 7-7" : "M5 12h14M12 5l7 7-7 7"}/>
+            <path d={isRTL ? "M19 12H5M12 19l-7-7 7-7" : "M5 12h14M12 5l7 7-7 7"} />
           </svg>
         </Link>
       </div>
@@ -139,7 +147,7 @@ export function ProductsSection() {
                     <span className="text-4xl">🌿</span>
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"/>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 {p.compare_at_price && p.compare_at_price > p.price && (
                   <div className="absolute top-2 left-2 bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
                     {Math.round((1 - p.price / p.compare_at_price) * 100)}% {lang === "ar" ? "خصم" : "OFF"}
@@ -159,16 +167,15 @@ export function ProductsSection() {
                   </div>
                   <button
                     onClick={() => handleAdd(p)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      added === p.id
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${added === p.id
                         ? "bg-[#e8f3ec] text-[#17583a] border border-[#17583a]"
                         : "bg-[#17583a] text-white hover:bg-[#195b36]"
-                    }`}
+                      }`}
                   >
                     {added === p.id ? (
-                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg> {t.product.added}</>
+                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg> {t.product.added}</>
                     ) : (
-                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg> {t.shop.add_to_cart}</>
+                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg> {t.shop.add_to_cart}</>
                     )}
                   </button>
                 </div>
