@@ -104,6 +104,7 @@ export interface Product {
   description?: string;
   type: ProductType;
   price: number;
+  compare_at_price?: number | null;
   category_id?: number;
   category?: Category;
   images?: ProductImage[];

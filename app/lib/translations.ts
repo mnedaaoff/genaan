@@ -1,6 +1,8 @@
 export const en = {
   nav: {
     shop: "Shop",
+    journal: "Journal",
+    spaces: "Spaces",
     cart: "Cart",
     login: "Log in",
     search: "Search",
@@ -28,6 +30,13 @@ export const en = {
       soil: "Soil",
       vitamin: "Vitamins",
       accessory: "Accessories",
+      "نباتات داخلية": "Indoor Plants",
+      "نباتات خارجية": "Outdoor Plants",
+      "نباتات المطبخ": "Kitchen Plants",
+      "بذور للزراعة": "Seeds",
+      "أصص وتربة": "Pots & Soil",
+      "أسمدة وفيتامينات": "Fertilizers & Vitamins",
+      "إكسسوارات": "Accessories",
     },
   },
   cart: {
@@ -129,6 +138,8 @@ export const en = {
 export const ar = {
   nav: {
     shop: "المتجر",
+    journal: "المجلة",
+    spaces: "المساحات",
     cart: "السلة",
     login: "تسجيل الدخول",
     search: "بحث",
@@ -156,6 +167,13 @@ export const ar = {
       soil: "تربة",
       vitamin: "فيتامينات",
       accessory: "اكسسوارات",
+      "نباتات داخلية": "نباتات داخلية",
+      "نباتات خارجية": "نباتات خارجية",
+      "نباتات المطبخ": "نباتات المطبخ",
+      "بذور للزراعة": "بذور للزراعة",
+      "أصص وتربة": "أصص وتربة",
+      "أسمدة وفيتامينات": "أسمدة وفيتامينات",
+      "إكسسوارات": "إكسسوارات",
     },
   },
   cart: {

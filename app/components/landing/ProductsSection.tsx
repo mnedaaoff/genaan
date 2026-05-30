@@ -5,25 +5,63 @@ import Link from "next/link";
 import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
 import { useState, useEffect } from "react";
-import { products as productsApi } from "../../lib/api";
-import type { Product } from "../../lib/types";
+import { supabase } from "../../lib/supabase";
+
+interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  compare_at_price?: number;
+  type?: string;
+  category_id?: number;
+  product_images?: { url: string; is_primary: boolean }[];
+  inventory?: { quantity: number; reserved: number }[];
+}
 
 export function ProductsSection() {
   const { addItem } = useCart();
-  const { t } = useI18n();
-  const [added, setAdded] = useState<number | null>(null);
+  const { t, lang, isRTL } = useI18n();
+  const [added, setAdded] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    productsApi.list({ per_page: 4 })
-      .then(res => setProducts(res.data?.slice(0, 4) ?? []))
-      .catch(() => setProducts([]))
-      .finally(() => setLoading(false));
+    async function fetchProducts() {
+      const { data, error } = await supabase
+        .from("products")
+        .select(`
+          id, name, description, price, compare_at_price, type, category_id, is_active, rating_avg,
+          product_images (url, is_primary),
+          inventory (quantity, reserved)
+        `)
+        .eq("is_active", true)
+        .order("rating_avg", { ascending: false })
+        .limit(4);
+
+      if (error) {
+        console.warn("Products fetch error:", error.message);
+        setProducts([]);
+      } else {
+        setProducts((data ?? []) as unknown as Product[]);
+      }
+      setLoading(false);
+    }
+    fetchProducts();
   }, []);
 
   const handleAdd = (p: Product) => {
-    addItem(p);
+    const imgUrl = p.product_images?.find(i => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null;
+    const stock = p.inventory?.[0] ? (p.inventory[0].quantity - p.inventory[0].reserved) : 99;
+
+    addItem({
+      id: p.id as any,
+      name: p.name,
+      price: p.price,
+      images: imgUrl ? [{ url: imgUrl }] : [],
+      stock: stock,
+      type: p.type ?? "plant",
+    } as any);
     setAdded(p.id);
     setTimeout(() => setAdded(null), 1500);
   };
@@ -56,7 +94,7 @@ export function ProductsSection() {
   if (products.length === 0) return null;
 
   return (
-    <section className="py-14">
+    <section className="py-14" dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex items-end justify-between mb-8">
         <div>
           <p className="text-xs tracking-[0.2em] font-bold text-[#6a8377] uppercase mb-2">{t.products_section.subtitle}</p>
@@ -67,37 +105,51 @@ export function ProductsSection() {
           className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-[#17583a] hover:underline"
         >
           {t.products_section.view_all}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d={isRTL ? "M19 12H5M12 19l-7-7 7-7" : "M5 12h14M12 5l7 7-7 7"}/>
+          </svg>
         </Link>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {products.map(p => {
-          const imgUrl = p.images?.[0]?.url;
+          const imgUrl = p.product_images?.find(i => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null;
+          const name = p.name;
+          const description = p.description;
           return (
-            <article key={p.id} className="group rounded-2xl bg-white shadow-sm overflow-hidden card-hover flex flex-col">
-              <Link href={`/shop/${p.slug || p.id}`} className="relative h-52 overflow-hidden bg-[#f0f2ee] block">
+            <article key={p.id} className="group rounded-2xl bg-white shadow-sm overflow-hidden card-hover flex flex-col hover:shadow-md transition-shadow duration-300">
+              <Link href={`/shop/${p.id}`} className="relative h-52 overflow-hidden bg-[#f0f2ee] block">
                 {imgUrl ? (
                   <Image
                     src={imgUrl}
-                    alt={p.name}
+                    alt={name}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[#8aab99] text-sm">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm0-10h2v8h-2V6z"/></svg>
+                    <span className="text-4xl">🌿</span>
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"/>
+                {p.compare_at_price && p.compare_at_price > p.price && (
+                  <div className="absolute top-2 left-2 bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                    {Math.round((1 - p.price / p.compare_at_price) * 100)}% {lang === "ar" ? "خصم" : "OFF"}
+                  </div>
+                )}
               </Link>
               <div className="p-4 flex-1 flex flex-col">
                 <p className="text-[10px] uppercase tracking-[0.15em] font-semibold text-[#6a8377] mb-1">{p.type || "Plant"}</p>
-                <h3 className="font-heading font-bold text-[#0d3a24] leading-tight">{p.name}</h3>
-                <p className="text-xs text-[#8aab99] mt-1 flex-1 line-clamp-2">{p.description || ""}</p>
+                <h3 className="font-heading font-bold text-[#0d3a24] leading-tight">{name}</h3>
+                <p className="text-xs text-[#8aab99] mt-1 flex-1 line-clamp-2">{description || ""}</p>
                 <div className="mt-4 flex items-center justify-between">
-                  <span className="text-base font-black font-heading text-[#17583a]">EGP {Number(p.price).toFixed(2)}</span>
+                  <div>
+                    <span className="text-base font-black font-heading text-[#17583a]">EGP {Number(p.price).toFixed(2)}</span>
+                    {p.compare_at_price && p.compare_at_price > p.price && (
+                      <span className="text-xs text-[#8aab99] line-through ms-2">EGP {Number(p.compare_at_price).toFixed(2)}</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleAdd(p)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -107,7 +159,7 @@ export function ProductsSection() {
                     }`}
                   >
                     {added === p.id ? (
-                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg> Added</>
+                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg> {t.product.added}</>
                     ) : (
                       <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg> {t.shop.add_to_cart}</>
                     )}

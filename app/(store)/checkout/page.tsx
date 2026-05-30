@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCart } from "../../lib/cart-context";
 import { useAuth } from "../../lib/auth-context";
 import { useI18n } from "../../lib/i18n-context";
-import { orders, addresses as addressApi, coupons as couponsApi } from "../../lib/api";
+import { supabase } from "../../lib/supabase";
 
 const STEPS = ["Delivery", "Payment", "Review"] as const;
 type Step = typeof STEPS[number];
@@ -18,65 +18,132 @@ function toNum(v: unknown): number {
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, isLoading: state_isLoading } = useAuth();
   const { t } = useI18n();
 
-  const [step, setStep]               = useState<Step>("Delivery");
-  const [placed, setPlaced]           = useState(false);
+  const [step, setStep] = useState<Step>("Delivery");
+  const [placed, setPlaced] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState<number | null>(null);
-  const [placeError, setPlaceError]   = useState("");
-  const [placing, setPlacing]         = useState(false);
-  const [payPhone, setPayPhone]       = useState("");
+  const [placeError, setPlaceError] = useState("");
+  const [placing, setPlacing] = useState(false);
+  const [payPhone, setPayPhone] = useState("");
 
   // Address state
-  const [savedAddressId, setSavedAddressId] = useState<number | null>(null);
   const [hasSavedAddress, setHasSavedAddress] = useState(false);
-  const [editingAddress, setEditingAddress]   = useState(false);
+  const [editingAddress, setEditingAddress] = useState(false);
   const [address, setAddress] = useState({
     line1: "", city: "", postcode: "", country: "EG", phone: "", full_name: "",
   });
 
   // Coupon state
-  const [couponCode, setCouponCode]   = useState("");
+  const [couponCode, setCouponCode] = useState("");
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponError, setCouponError] = useState("");
   const [couponApplying, setCouponApplying] = useState(false);
-  const [couponApplied, setCouponApplied]   = useState(false);
+  const [couponApplied, setCouponApplied] = useState(false);
 
   const [payment, setPayment] = useState({ method: "card" });
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!user && !state_isLoading) {
+      window.location.href = `/login?redirect=/checkout`;
+    }
+  }, [user, state_isLoading]);
+
   // Fetch saved addresses on mount if logged in
   useEffect(() => {
-    if (!user) return;
-    addressApi.list().then((res: any[]) => {
-      if (res && res.length > 0) {
-        const def = res.find((a: any) => a.is_default) || res[0];
-        setSavedAddressId(def.id);
-        setHasSavedAddress(true);
-        setAddress({
-          line1:     def.street    || "",
-          city:      def.city      || "",
-          postcode:  def.postcode  || "",
-          country:   def.country   || "EG",
-          phone:     def.phone     || "",
-          full_name: def.full_name || "",
-        });
-        setPayPhone(prev => prev || def.phone || "");
-      } else {
-        // No saved address → show form immediately
-        setEditingAddress(true);
-      }
-    }).catch(() => setEditingAddress(true));
+    if (!user) { setEditingAddress(true); return; }
+    async function loadAddress() {
+      try {
+        // Load default address from addresses table
+        const { data: addr } = await supabase
+          .from("addresses")
+          .select("full_name,phone,city,street")
+          .eq("user_id", (user as any).id)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        // Also load profile name/phone as fallback
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name,last_name,phone")
+          .eq("id", (user as any).id)
+          .maybeSingle();
+
+        if (addr?.street) {
+          setHasSavedAddress(true);
+          setAddress({
+            line1: addr.street || "",
+            city: addr.city || "",
+            postcode: "",
+            country: "EG",
+            phone: addr.phone || profile?.phone || "",
+            full_name: addr.full_name || `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim(),
+          });
+          setPayPhone(prev => prev || addr.phone || profile?.phone || "");
+        } else if (profile) {
+          // Pre-fill name/phone even without a saved address
+          setAddress(a => ({
+            ...a,
+            full_name: `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim(),
+            phone: profile.phone || "",
+          }));
+          setPayPhone(prev => prev || profile.phone || "");
+          setEditingAddress(true);
+        } else {
+          setEditingAddress(true);
+        }
+      } catch { setEditingAddress(true); }
+    }
+    loadAddress();
   }, [user]);
 
-  // Apply coupon
+  // Apply coupon — direct Supabase query
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
     setCouponApplying(true);
     setCouponError("");
     try {
-      const res: any = await couponsApi.apply(couponCode.trim(), subtotal);
-      setCouponDiscount(toNum(res?.discount ?? 0));
+      const code = couponCode.trim().toUpperCase();
+      const now = new Date().toISOString();
+
+      const { data: coupon, error: qErr } = await supabase
+        .from("coupons")
+        .select("*")
+        .eq("code", code)
+        .eq("is_active", true)
+        .single();
+
+      if (qErr || !coupon) throw new Error("Invalid coupon code");
+
+      // Check expiry
+      if (coupon.expires_at && coupon.expires_at < now) throw new Error("This coupon has expired");
+
+      // Check usage limit (old schema: max_uses / used_count)
+      const usageLimit = coupon.usage_limit ?? coupon.max_uses ?? null;
+      if (usageLimit && coupon.used_count >= usageLimit)
+        throw new Error("This coupon has reached its usage limit");
+
+      // Check minimum order (old schema: min_order)
+      const minOrder = coupon.minimum_order_amount ?? coupon.min_order ?? 0;
+      if (minOrder && subtotal < minOrder)
+        throw new Error(`Minimum order of EGP ${minOrder} required`);
+
+      // Calculate discount (old schema: discount_type / discount_value)
+      let discount = 0;
+      const discType = coupon.type ?? coupon.discount_type ?? "percent";
+      const discValue = coupon.value ?? coupon.discount_value ?? 0;
+      const isPercent = discType === "percent" || discType === "percentage";
+      if (isPercent) {
+        discount = (subtotal * discValue) / 100;
+        if (coupon.max_discount_amount) discount = Math.min(discount, coupon.max_discount_amount);
+      } else {
+        discount = discValue;
+      }
+      discount = Math.min(discount, subtotal); // can't exceed subtotal
+
+      setCouponDiscount(discount);
       setCouponApplied(true);
       setCouponError("");
     } catch (err: any) {
@@ -96,77 +163,168 @@ export default function CheckoutPage() {
   };
 
   const shipping = address.country === "EG" ? 0 : 75;
-  const total    = Math.max(0, subtotal + shipping - couponDiscount);
+  const total = Math.max(0, subtotal + shipping - couponDiscount);
 
   const handlePlaceOrder = async () => {
     setPlacing(true);
     setPlaceError("");
     try {
-      // 1. If user filled a new address and wants to save it
-      if (user && editingAddress && address.line1 && address.city) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      // 1. Ensure profile row exists (fixes FK constraint on orders.user_id → profiles.id)
+      if (authUser) {
+        await supabase.from("profiles").upsert({
+          id: authUser.id,
+          email: authUser.email ?? "",
+        }, { onConflict: "id", ignoreDuplicates: true });
+      }
+
+      // 2. Upsert address and capture address_id for the order
+      let savedAddressId: number | null = null;
+      if (authUser && address.line1 && address.city) {
         try {
-          const saved: any = await addressApi.create({
-            full_name:  address.full_name,
-            phone:      address.phone,
-            city:       address.city,
-            postcode:   address.postcode,
-            country:    address.country,
-            street:     address.line1,
-            is_default: !hasSavedAddress,
-          });
-          setSavedAddressId(saved?.id ?? null);
+          // Check if a default address already exists
+          const { data: existingAddr } = await supabase
+            .from("addresses")
+            .select("id")
+            .eq("user_id", authUser.id)
+            .eq("is_default", true)
+            .maybeSingle();
+
+          if (existingAddr?.id) {
+            // Update existing
+            await supabase.from("addresses").update({
+              full_name: address.full_name,
+              phone: address.phone,
+              city: address.city,
+              street: address.line1,
+            }).eq("id", existingAddr.id);
+            savedAddressId = existingAddr.id;
+          } else {
+            // Insert new and capture ID
+            const { data: newAddr } = await supabase
+              .from("addresses")
+              .insert({
+                user_id: authUser.id,
+                full_name: address.full_name || "Guest",
+                phone: address.phone || "",
+                city: address.city,
+                street: address.line1,
+                is_default: true,
+              })
+              .select("id")
+              .single();
+            savedAddressId = newAddr?.id ?? null;
+          }
         } catch { /* non-fatal */ }
       }
 
-      // 2. Create order
-      const orderPayload = {
-        items: items.map(item => ({
-          product_id: item.product_id,
-          variant_id: item.variant_id ?? null,
-          quantity:   item.quantity,
-          unit_price: toNum(item.variant?.price ?? item.product.price),
-        })),
-        shipping_address: address,
-        payment_method:   payment.method,
-        coupon_code:      couponApplied ? couponCode : undefined,
-        note: "",
-      };
-      const createdOrder = await orders.create(orderPayload as any);
-      const orderId = (createdOrder as any)?.id;
-      if (!orderId) throw new Error("Order creation failed — no ID returned.");
-      setPlacedOrderId(orderId);
+      // 3. Generate order number
+      const orderNumber = `GN-${Date.now().toString(36).toUpperCase()}`;
 
-      // 3. Auth check
-      if (!user) {
-        localStorage.setItem("genaan_pending_order", String(orderId));
+      // 4. Create order in Supabase
+      const { data: order, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+          user_id: authUser?.id ?? null,
+          address_id: savedAddressId,
+          order_number: orderNumber,
+          total: total,
+          shipping: shipping,
+          discount: couponDiscount,
+          coupon_code: couponApplied ? couponCode.toUpperCase() : null,
+          payment_status: "pending",
+          status: "pending",
+          subtotal: subtotal,
+          currency: "EGP",
+          shipping_name: address.full_name || "Guest",
+          shipping_phone: address.phone || payPhone || "",
+          shipping_city: address.city || "",
+          shipping_country: address.country === "EG" ? "Egypt" : address.country,
+        })
+        .select("id")
+        .single();
+
+      if (orderErr || !order) throw new Error(orderErr?.message ?? "Failed to create order");
+      setPlacedOrderId(order.id);
+
+      // 4. Create order items — only columns that exist in order_items schema
+      const orderItems = items.map(item => ({
+        order_id: order.id,
+        product_id: item.product_id,
+        variant_id: item.variant?.id ?? null,
+        quantity: item.quantity,
+        price: toNum(item.variant?.price ?? item.product.price),
+      }));
+
+      const { error: itemsErr } = await supabase.from("order_items").insert(orderItems);
+      if (itemsErr) console.warn("Order items insert error:", itemsErr.message);
+
+
+      // 5. Increment coupon used_count if used
+      if (couponApplied && couponCode) {
+        try {
+          const { error: rpcErr } = await supabase.rpc("increment_coupon_usage", { coupon_code: couponCode.toUpperCase() });
+          if (rpcErr) {
+            // RPC not available — do manual increment with raw SQL via update
+            await supabase.rpc("exec_sql", {
+              query: `UPDATE coupons SET used_count = used_count + 1 WHERE code = '${couponCode.toUpperCase()}'`
+            }).match(() => null); // truly best-effort
+          }
+        } catch { /* non-fatal */ }
+      }
+
+      // 6. If not logged in, redirect to login
+      if (!authUser) {
+        localStorage.setItem("genaan_pending_order", String(order.id));
         clearCart();
-        window.location.href = `/login?redirect=/checkout&pending_order=${orderId}`;
+        window.location.href = `/login?redirect=/checkout&pending_order=${order.id}`;
         return;
       }
 
-      // 4. Initiate Paymob payment
-      const payResult = await orders.pay(orderId, {
-        payment_method: payment.method as "card" | "wallet",
-        phone: payment.method === "wallet" ? payPhone : undefined,
-        billing: {
-          first_name: user?.name?.split(" ")[0] || "Guest",
-          last_name:  user?.name?.split(" ").slice(1).join(" ") || "User",
-          email:      user?.email || "guest@genaan.com",
-          phone:      address.phone || payPhone || "01000000000",
-          city:       address.city || "Cairo",
-          street:     address.line1 || "NA",
-        },
+      // 7. Initiate Paymob payment via our API route
+      const nameParts = address.full_name?.split(" ") ?? ["Guest"];
+      const returnUrl = `${window.location.origin}/checkout/complete?order_id=${order.id}`;
+
+      const payRes = await fetch("/api/paymob/intention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: order.id,
+          amount_cents: Math.round(total * 100), // EGP to cents
+          currency: "EGP",
+          payment_method: payment.method,
+          return_url: returnUrl,
+          billing_data: {
+            first_name: nameParts[0] ?? "Guest",
+            last_name: nameParts.slice(1).join(" ") || "User",
+            email: authUser.email ?? "guest@genaan.com",
+            phone_number: address.phone || payPhone || "01000000000",
+            street: address.line1 || "NA",
+            city: address.city || "Cairo",
+            country: address.country || "EG",
+            state: "NA",
+            apartment: "NA",
+            floor: "NA",
+            building: "NA",
+            postal_code: address.postcode || "00000",
+          },
+        }),
       });
 
-      clearCart();
+      const payData = await payRes.json();
 
-      if (payResult.client_secret && payResult.public_key) {
-        const returnUrl = encodeURIComponent(`${window.location.origin}/checkout/complete`);
-        window.location.href = `https://accept.paymob.com/unifiedcheckout/?publicKey=${payResult.public_key}&clientSecret=${payResult.client_secret}&returnUrl=${returnUrl}`;
-        return;
+      if (!payRes.ok || !payData.client_secret) {
+        // Paymob failed — show the error, DON'T mark order as placed
+        const errorMsg = payData.error ?? "Payment service unavailable. Please try again.";
+        console.error("Paymob error:", payData);
+        throw new Error(errorMsg);
       }
 
-      setPlaced(true);
+      // 8. Redirect to Paymob Unified Checkout
+      clearCart();
+      const encodedReturn = encodeURIComponent(returnUrl);
+      window.location.href = `https://accept.paymob.com/unifiedcheckout/?publicKey=${payData.public_key}&clientSecret=${payData.client_secret}&returnUrl=${encodedReturn}`;
     } catch (err: any) {
       setPlaceError(err.message ?? "Failed to place order. Please try again.");
     } finally {
@@ -174,12 +332,13 @@ export default function CheckoutPage() {
     }
   };
 
+
   if (items.length === 0 && !placed) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center bg-[#f4f5f1] px-5">
         <div className="w-16 h-16 rounded-full bg-[#e8f3ec] flex items-center justify-center mb-4">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="1.5">
-            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
           </svg>
         </div>
         <p className="text-[#0d3a24] font-semibold text-lg">{t.cart.empty}</p>
@@ -196,7 +355,7 @@ export default function CheckoutPage() {
       <div className="min-h-[70vh] flex items-center justify-center bg-[#f4f5f1] px-5 py-10">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-lg animate-fade-in">
           <div className="w-20 h-20 bg-[#e8f3ec] rounded-full flex items-center justify-center mx-auto mb-6 text-[#17583a]">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg>
           </div>
           <h1 className="text-3xl font-heading font-black text-[#0d3a24] mb-3">Order Placed!</h1>
           <p className="text-[#5f786c] text-sm leading-6 mb-8">
@@ -219,14 +378,14 @@ export default function CheckoutPage() {
         <div className="flex items-center gap-2 mb-10 overflow-x-auto pb-2">
           {STEPS.map((s, i) => {
             const isActive = step === s;
-            const isPast   = STEPS.indexOf(step) > i;
+            const isPast = STEPS.indexOf(step) > i;
             return (
               <div key={s} className="flex items-center gap-2 text-sm font-semibold shrink-0">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isActive ? "bg-[#17583a] text-white" : isPast ? "bg-[#e8f3ec] text-[#17583a]" : "bg-white border-2 border-[#d4ded7] text-[#8aab99]"}`}>
-                  {isPast ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg> : i + 1}
+                  {isPast ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg> : i + 1}
                 </div>
                 <span className={isActive ? "text-[#0d3a24]" : "text-[#8aab99]"}>{s}</span>
-                {i < STEPS.length - 1 && <div className="w-8 h-px bg-[#d4ded7] mx-2"/>}
+                {i < STEPS.length - 1 && <div className="w-8 h-px bg-[#d4ded7] mx-2" />}
               </div>
             );
           })}
@@ -255,8 +414,8 @@ export default function CheckoutPage() {
                       title="Change address"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                       </svg>
                       Change
                     </button>
@@ -323,8 +482,8 @@ export default function CheckoutPage() {
                 <h2 className="text-xl font-heading font-bold text-[#0d3a24] mb-6">Payment Method</h2>
                 <div className="flex gap-3 mb-6">
                   {[
-                    { id: "card",   label: "Credit / Debit Card", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
-                    { id: "wallet", label: "Mobile Wallet",       icon: <span className="text-base">📱</span> },
+                    { id: "card", label: "Credit / Debit Card", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg> },
+                    { id: "wallet", label: "Mobile Wallet", icon: <span className="text-base">📱</span> },
                   ].map(m => (
                     <button key={m.id} onClick={() => setPayment(p => ({ ...p, method: m.id }))}
                       className={`flex-1 py-3.5 rounded-xl border-2 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${payment.method === m.id ? "border-[#17583a] bg-[#e8f3ec] text-[#17583a]" : "border-[#d4ded7] text-[#5f786c]"}`}>
@@ -335,7 +494,7 @@ export default function CheckoutPage() {
 
                 {payment.method === "card" && (
                   <div className="p-4 bg-[#e8f3ec] rounded-xl text-sm text-[#17583a] flex items-center gap-2 mb-4">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                     You&apos;ll enter card details securely on the next step via Paymob.
                   </div>
                 )}
@@ -378,7 +537,7 @@ export default function CheckoutPage() {
                   {items.map(item => (
                     <div key={item.id} className="flex items-center gap-3">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-[#f0f2ee] flex-shrink-0">
-                        {item.product.images?.[0]?.url && <Image src={item.product.images[0].url} alt={item.product.name} fill sizes="48px" className="object-cover"/>}
+                        {item.product.images?.[0]?.url && <Image src={item.product.images[0].url} alt={item.product.name} fill sizes="48px" className="object-cover" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-[#0d3a24] truncate">{item.product.name}</p>
@@ -394,7 +553,7 @@ export default function CheckoutPage() {
                   {couponApplied ? (
                     <div className="flex items-center justify-between p-3 bg-[#e8f3ec] rounded-xl border border-[#c4ddd0]">
                       <div className="flex items-center gap-2">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
                         <span className="text-sm font-semibold text-[#17583a]">{couponCode} — EGP {couponDiscount.toFixed(2)} off</span>
                       </div>
                       <button onClick={removeCoupon} className="text-xs text-[#8aab99] hover:text-red-500">Remove</button>
@@ -435,7 +594,7 @@ export default function CheckoutPage() {
                       className="flex-1 py-3.5 bg-[#17583a] text-white font-semibold rounded-xl hover:bg-[#195b36] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {placing
-                        ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Placing...</>
+                        ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg> Placing...</>
                         : "Place Order"
                       }
                     </button>
@@ -471,7 +630,7 @@ export default function CheckoutPage() {
               </div>
             </div>
             <div className="mt-5 flex items-center gap-2 text-xs text-[#8aab99]">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
               Secure checkout - SSL encrypted
             </div>
           </div>

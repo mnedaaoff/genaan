@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.railway.app" },
       // Production domain (update when available)
       { protocol: "https", hostname: "*.genaan.com" },
+      // Supabase Storage
+      { protocol: "https", hostname: "hybybaqjoivioinudefl.supabase.co" },
+      { protocol: "https", hostname: "*.supabase.co" },
     ],
   },
 };

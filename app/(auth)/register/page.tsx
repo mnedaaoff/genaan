@@ -24,7 +24,7 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await register(`${form.firstName} ${form.lastName}`, form.email, form.password);
+      await register(form.firstName, form.lastName, form.email, form.password, form.phone);
       router.push("/");
     } catch (err: any) {
       setError(err?.message ?? "Registration failed. Please try again.");

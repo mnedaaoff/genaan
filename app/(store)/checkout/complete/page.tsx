@@ -1,119 +1,111 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
-function CheckoutCompleteContent() {
-  const searchParams  = useSearchParams();
-  const successParam  = searchParams.get("success");
-  const success       = successParam === "1" || successParam === "true";
-  const transactionId = searchParams.get("transaction_id") ?? "";
-  const orderRef      = searchParams.get("order_ref") ?? "";
-  const method        = searchParams.get("method") ?? "card";
+function CompleteContent() {
+  const searchParams = useSearchParams();
+  const orderId = searchParams.get("order_id");
+  const success = searchParams.get("success");
+  const pending = searchParams.get("pending");
+  const [status, setStatus] = useState<"loading" | "success" | "failed">("loading");
+  const [orderNumber, setOrderNumber] = useState("");
 
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { setVisible(true); }, []);
+  useEffect(() => {
+    async function checkOrder() {
+      if (!orderId) { setStatus("success"); return; }
+      
+      const { data } = await supabase
+        .from("orders")
+        .select("id, order_number, payment_status")
+        .eq("id", orderId)
+        .single();
+
+      if (data) {
+        setOrderNumber(data.order_number ?? `#${data.id}`);
+        
+        // If Paymob redirects with success=false, show failed/canceled page
+        if (success === "false") {
+          setStatus("failed");
+          // Update order payment status in database
+          await supabase
+            .from("orders")
+            .update({ 
+              payment_status: "failed",
+              status: "canceled"
+            })
+            .eq("id", orderId);
+        } else {
+          setStatus("success");
+        }
+      } else {
+        setStatus(success === "false" ? "failed" : "success");
+      }
+    }
+    checkOrder();
+  }, [orderId, success, pending]);
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center bg-[#f4f5f1]">
+        <div className="w-10 h-10 border-4 border-[#e4ece7] border-t-[#17583a] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center bg-[#f4f5f1] px-5 py-10">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-lg animate-fade-in">
+          <div className="w-20 h-20 bg-[#fdf2f2] rounded-full flex items-center justify-center mx-auto mb-6 text-[#de3e3e]">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-heading font-black text-[#661d1d] mb-3">Order Canceled</h1>
+          <p className="text-[#7f5f5f] text-sm leading-6 mb-2">
+            {orderNumber
+              ? `Payment for order ${orderNumber} was canceled or unsuccessful.`
+              : "Payment was canceled or unsuccessful."}
+          </p>
+          <p className="text-[#a88d8d] text-xs mb-8">No funds were charged. If this was an accident, you can try checking out again.</p>
+          <div className="flex flex-col gap-3">
+            <Link href="/checkout" className="block w-full py-3.5 bg-[#de3e3e] text-white font-semibold rounded-xl hover:bg-[#c53030] transition-colors">
+              Try Again
+            </Link>
+            <Link href="/" className="block w-full py-3 border border-[#f3d4d4] text-[#7f5f5f] font-semibold rounded-xl hover:border-[#de3e3e] transition-colors text-sm">
+              Back to Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`min-h-screen bg-[#f4f5f1] flex items-center justify-center px-4 transition-opacity duration-500 ${visible ? "opacity-100" : "opacity-0"}`}>
-      <div className="w-full max-w-lg bg-white rounded-3xl shadow-sm overflow-hidden">
-        {success ? (
-          <>
-            {/* Success header */}
-            <div className="bg-[#17583a] px-8 py-10 text-center">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
-              </div>
-              <h1 className="text-2xl font-heading font-black text-white">Payment Successful!</h1>
-              <p className="text-[#a8c7b6] mt-2 text-sm">Your order has been confirmed.</p>
-            </div>
-
-            {/* Details */}
-            <div className="px-8 py-8 space-y-4">
-              {transactionId && (
-                <div className="flex justify-between items-center py-3 border-b border-[#f0f2ee]">
-                  <span className="text-sm text-[#5f786c]">Transaction ID</span>
-                  <span className="text-sm font-mono font-semibold text-[#0d3a24]">{transactionId}</span>
-                </div>
-              )}
-              {orderRef && (
-                <div className="flex justify-between items-center py-3 border-b border-[#f0f2ee]">
-                  <span className="text-sm text-[#5f786c]">Order Reference</span>
-                  <span className="text-sm font-semibold text-[#0d3a24]">{orderRef}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center py-3 border-b border-[#f0f2ee]">
-                <span className="text-sm text-[#5f786c]">Payment Method</span>
-                <span className="text-sm font-semibold text-[#0d3a24] capitalize">
-                  {method === "wallet" ? "💳 Mobile Wallet" : "💳 Credit / Debit Card"}
-                </span>
-              </div>
-
-              <div className="mt-6 p-4 bg-[#e8f3ec] rounded-xl text-sm text-[#17583a] text-center">
-                📦 We&apos;ll send you a confirmation email with your order details.
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <Link
-                  href="/shop"
-                  className="flex-1 py-3 border border-[#d4ded7] text-sm font-semibold text-[#5f786c] rounded-xl hover:border-[#17583a] transition-colors text-center"
-                >
-                  Continue Shopping
-                </Link>
-                <Link
-                  href="/account"
-                  className="flex-1 py-3 bg-[#17583a] text-white text-sm font-semibold rounded-xl hover:bg-[#195b36] transition-colors text-center"
-                >
-                  Track Order
-                </Link>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Failure header */}
-            <div className="bg-red-500 px-8 py-10 text-center">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <path d="M18 6L6 18M6 6l12 12"/>
-                </svg>
-              </div>
-              <h1 className="text-2xl font-heading font-black text-white">Payment Failed</h1>
-              <p className="text-red-100 mt-2 text-sm">Your payment could not be processed.</p>
-            </div>
-
-            <div className="px-8 py-8 space-y-4">
-              {transactionId && (
-                <div className="flex justify-between items-center py-3 border-b border-[#f0f2ee]">
-                  <span className="text-sm text-[#5f786c]">Reference</span>
-                  <span className="text-sm font-mono text-[#0d3a24]">{transactionId}</span>
-                </div>
-              )}
-
-              <div className="p-4 bg-red-50 rounded-xl text-sm text-red-700 text-center">
-                ⚠️ No amount was charged. Please try again or use a different payment method.
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <Link
-                  href="/checkout"
-                  className="flex-1 py-3 bg-[#17583a] text-white text-sm font-semibold rounded-xl hover:bg-[#195b36] transition-colors text-center"
-                >
-                  Try Again
-                </Link>
-                <Link
-                  href="/contact"
-                  className="flex-1 py-3 border border-[#d4ded7] text-sm font-semibold text-[#5f786c] rounded-xl hover:border-[#17583a] transition-colors text-center"
-                >
-                  Contact Support
-                </Link>
-              </div>
-            </div>
-          </>
-        )}
+    <div className="min-h-[70vh] flex items-center justify-center bg-[#f4f5f1] px-5 py-10">
+      <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-lg animate-fade-in">
+        <div className="w-20 h-20 bg-[#e8f3ec] rounded-full flex items-center justify-center mx-auto mb-6 text-[#17583a]">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h1 className="text-3xl font-heading font-black text-[#0d3a24] mb-3">Order Placed!</h1>
+        <p className="text-[#5f786c] text-sm leading-6 mb-2">
+          {orderNumber
+            ? `Your order ${orderNumber} has been placed successfully.`
+            : "Your order has been placed successfully."}
+        </p>
+        <p className="text-[#8aab99] text-xs mb-8">You will receive a confirmation shortly. Payment status will be updated automatically.</p>
+        <div className="flex flex-col gap-3">
+          <Link href="/shop" className="block w-full py-3.5 bg-[#17583a] text-white font-semibold rounded-xl hover:bg-[#195b36] transition-colors">
+            Continue Shopping
+          </Link>
+          <Link href="/" className="block w-full py-3 border border-[#d4ded7] text-[#5f786c] font-semibold rounded-xl hover:border-[#17583a] transition-colors text-sm">
+            Back to Home
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -122,11 +114,11 @@ function CheckoutCompleteContent() {
 export default function CheckoutCompletePage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#f4f5f1] flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-[#17583a] border-t-transparent rounded-full animate-spin"/>
+      <div className="min-h-[70vh] flex items-center justify-center bg-[#f4f5f1]">
+        <div className="w-10 h-10 border-4 border-[#e4ece7] border-t-[#17583a] rounded-full animate-spin"/>
       </div>
     }>
-      <CheckoutCompleteContent />
+      <CompleteContent />
     </Suspense>
   );
 }

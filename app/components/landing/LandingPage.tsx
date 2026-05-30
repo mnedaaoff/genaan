@@ -12,7 +12,7 @@ export function LandingPage() {
       <main className="mx-auto max-w-[1120px] px-5 py-7 md:px-8 md:py-9">
         <LandingHeader />
         <HeroSection />
-        <ProductsSection products={landingProducts} />
+        <ProductsSection />
         <InnovationSection />
         <CommunitySection />
         <LandingFooter groups={footerGroups} />

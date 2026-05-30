@@ -1,91 +1,123 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import type { User } from "./types";
+import { supabase } from "./supabase";
+import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
+
+// ─── Shape ────────────────────────────────────────────────────────────────────
+
+interface AppUser {
+  id: number | string;
+  name: string;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthState {
-  user: User | null;
+  user: AppUser | null;
   token: string | null;
   isLoading: boolean;
 }
 
 interface AuthContextValue extends AuthState {
   login:    (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (firstName: string, lastName: string, email: string, password: string, phone?: string) => Promise<void>;
   logout:   () => void;
   isAdmin:  boolean;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
-const TOKEN_KEY = "genaan_token";
+function toAppUser(su: SupabaseUser, session: Session): AppUser {
+  const meta = su.user_metadata ?? {};
+  return {
+    id:         su.id,
+    name:       meta.full_name ?? meta.name ?? su.email ?? "User",
+    email:      su.email ?? "",
+    is_admin:   meta.is_admin === true || meta.role === "admin",
+    created_at: su.created_at,
+    updated_at: su.updated_at ?? su.created_at,
+  };
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null, token: null, isLoading: true,
   });
 
-  // Rehydrate from localStorage on mount
+  // Rehydrate session from Supabase on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(TOKEN_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setState({ user: parsed.user, token: parsed.token, isLoading: false });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setState({
+          user:      toAppUser(session.user, session),
+          token:     session.access_token,
+          isLoading: false,
+        });
       } else {
         setState(s => ({ ...s, isLoading: false }));
       }
-    } catch {
-      setState(s => ({ ...s, isLoading: false }));
-    }
+    });
+
+    // Listen for sign-in / sign-out events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setState({
+          user:      toAppUser(session.user, session),
+          token:     session.access_token,
+          isLoading: false,
+        });
+      } else {
+        setState({ user: null, token: null, isLoading: false });
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const persist = (user: User, token: string) => {
-    localStorage.setItem(TOKEN_KEY, JSON.stringify({ user, token }));
-    setState({ user, token, isLoading: false });
-  };
-
+  // ── Login ──────────────────────────────────────────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as any).message ?? "Login failed");
-    }
-    const { user, token } = await res.json();
-    persist(user, token);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string) => {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+  // ── Register ───────────────────────────────────────────────────────────────
+  const register = useCallback(async (
+    firstName: string,
+    lastName: string,
+    email: string,
+    password: string,
+    phone?: string,
+  ) => {
+    const fullName = `${firstName} ${lastName}`.trim();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, first_name: firstName, last_name: lastName, phone } },
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as any).message ?? "Registration failed");
+    if (error) throw new Error(error.message);
+
+    // Upsert profile row so checkout & other pages can read name/phone immediately
+    if (data.user) {
+      await supabase.from("profiles").upsert({
+        id: data.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone: phone ?? null,
+      }, { onConflict: "id" });
     }
-    const { user, token } = await res.json();
-    persist(user, token);
   }, []);
 
+  // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    const stored = localStorage.getItem(TOKEN_KEY);
-    const token = stored ? JSON.parse(stored)?.token : null;
-    localStorage.removeItem(TOKEN_KEY);
-    setState({ user: null, token: null, isLoading: false });
-    // Fire-and-forget backend logout
-    if (API_BASE && token) {
-      fetch(`${API_BASE}/auth/logout`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {/* ignore */});
-    }
+    await supabase.auth.signOut();
   }, []);
 
   return (
