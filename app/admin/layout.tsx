@@ -17,12 +17,13 @@ const Icons = {
   categories:  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l-5.5 9h11L12 2zm0 3.84L13.93 9h-3.87L12 5.84zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5S15.01 22 17.5 22s4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 7c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM3 21.5h8v-8H3v8zm2-6h4v4H5v-4z"/></svg>,
   spaces:      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
   settings:    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>,
+  homepage:    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
 };
 
 const NAV_ITEMS = [
   { href: "/admin",            icon: Icons.dashboard,  en: "Dashboard",   ar: "لوحة التحكم",    section: null },
   { href: "/admin/products",   icon: Icons.products,   en: "Products",    ar: "المنتجات",        section: "Catalog" },
-  { href: "/admin/categories", icon: Icons.categories, en: "Categories",  ar: "الفئات",          section: "Catalog" },
+  { href: "/admin/homepage",   icon: Icons.homepage,   en: "Homepage",    ar: "الصفحة الرئيسية", section: "Catalog" },
   { href: "/admin/orders",     icon: Icons.orders,     en: "Orders",      ar: "الطلبات",         section: "Sales" },
   { href: "/admin/coupons",    icon: Icons.coupons,    en: "Coupons",     ar: "الكوبونات",       section: "Sales" },
   { href: "/admin/customers",  icon: Icons.customers,  en: "Customers",   ar: "العملاء",         section: "People" },
@@ -168,8 +169,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         `}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-white/10">
-          <span className="text-xl font-black text-white tracking-tight">🌿 Genaan</span>
+        <div className="h-16 flex items-center gap-2.5 px-6 border-b border-white/10">
+          <img src="/favicon.ico" alt="Genaan" className="w-8 h-8 rounded-lg shrink-0" />
+          <span className="text-xl font-black text-white tracking-tight">Genaan</span>
           <span className="ms-2 text-[10px] bg-[#17583a] text-[#a3d4b5] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
             Admin
           </span>

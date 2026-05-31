@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
-
+import { ProductVariantsEditor } from "../../../../components/admin/ProductVariantsEditor";
+import { ProductSectionsPicker } from "../../../../components/admin/ProductSectionsPicker";
+import { CareGuideEditor, careGuidePayload } from "../../../../components/admin/CareGuideEditor";
+import { saveProductSections, type HomepageSectionOption } from "../../../../lib/product-sections";
+import { POT_SIZE_LABELS, type PotSize } from "../../../../lib/pot-utils";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -18,23 +22,32 @@ export default function EditProductPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [existingImageId, setExistingImageId] = useState<number | null>(null);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [shopSections, setShopSections] = useState<HomepageSectionOption[]>([]);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
 
   const [form, setForm] = useState({
-    name: "", description: "", scientific_name: "",
+    name_en: "", name_ar: "",
+    description_en: "", description_ar: "",
+    scientific_name: "",
     price: "", compare_at_price: "",
-    type: "plant", category_id: "", stock: "", is_active: true,
+    type: "plant", stock: "", is_active: true,
+    pot_size: "medium" as PotSize,
+    watering_days: "", light_level: "", humidity_level: "",
+    care_notes_en: "", care_notes_ar: "",
   });
 
   useEffect(() => {
     const s = localStorage.getItem("genaan_lang");
     if (s === "ar" || s === "en") setLang(s);
 
-    async function loadCats() {
-      const { data } = await supabase.from("categories").select("id, name").order("id");
-      if (data) setCategories(data);
+    async function loadSections() {
+      const { data } = await supabase
+        .from("homepage_sections")
+        .select("id, slug, name_en, name_ar, is_active")
+        .order("sort_order");
+      if (data) setShopSections(data as HomepageSectionOption[]);
     }
-    loadCats();
+    loadSections();
   }, []);
 
   useEffect(() => {
@@ -50,15 +63,22 @@ export default function EditProductPage() {
       if (pErr || !p) { setError("Product not found"); setLoading(false); return; }
 
       setForm({
-        name: p.name ?? "",
-        description: p.description ?? "",
+        name_en: p.name_en ?? p.name ?? "",
+        name_ar: p.name_ar ?? p.name ?? "",
+        description_en: p.description_en ?? p.description ?? "",
+        description_ar: p.description_ar ?? p.description ?? "",
         scientific_name: p.scientific_name ?? "",
         price: String(p.price ?? ""),
         compare_at_price: p.compare_at_price ? String(p.compare_at_price) : "",
         type: p.type ?? "plant",
-        category_id: p.category_id ? String(p.category_id) : "",
         stock: "",
         is_active: p.is_active ?? true,
+        pot_size: (p.pot_size as PotSize) || "medium",
+        watering_days: p.watering_days != null ? String(p.watering_days) : "",
+        light_level: p.light_level ?? "",
+        humidity_level: p.humidity_level ?? "",
+        care_notes_en: p.care_notes_en ?? "",
+        care_notes_ar: p.care_notes_ar ?? "",
       });
 
       // Load primary image
@@ -79,6 +99,12 @@ export default function EditProductPage() {
         .single();
 
       if (inv) setForm(f => ({ ...f, stock: String(inv.quantity) }));
+
+      const { data: secLinks } = await supabase
+        .from("homepage_section_products")
+        .select("section_id")
+        .eq("product_id", productId);
+      setSelectedSectionIds((secLinks ?? []).map(r => r.section_id));
 
       setLoading(false);
     }
@@ -115,25 +141,47 @@ export default function EditProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!form.name.trim())  { setError(isRTL ? "اسم المنتج مطلوب" : "Product name is required"); return; }
-    if (!form.price || Number(form.price) <= 0) { setError(isRTL ? "السعر مطلوب" : "Price is required"); return; }
+    if (!form.name_en.trim() || !form.name_ar.trim()) {
+      setError(isRTL ? "الاسم بالإنجليزية والعربية مطلوب" : "English and Arabic names are required");
+      return;
+    }
+    if (!form.price || Number(form.price) <= 0) {
+      setError(isRTL ? "السعر مطلوب (أو احفظ التركيبات أولاً لتحديث أقل سعر)" : "Price is required (or save variants first to set lowest price)");
+      return;
+    }
 
     setSaving(true);
     try {
-      // 1. Update product
-      const { error: updateErr } = await supabase
-        .from("products")
-        .update({
-          name: form.name.trim(),
-          description: form.description.trim() || null,
+      const updatePayload: Record<string, unknown> = {
+          name: form.name_en.trim(),
+          name_en: form.name_en.trim(),
+          name_ar: form.name_ar.trim(),
+          description: form.description_en.trim() || form.description_ar.trim() || null,
+          description_en: form.description_en.trim() || null,
+          description_ar: form.description_ar.trim() || null,
           scientific_name: form.scientific_name.trim() || null,
           price: Number(form.price),
           compare_at_price: form.compare_at_price ? Number(form.compare_at_price) : null,
           type: form.type,
-          category_id: form.category_id ? Number(form.category_id) : null,
+          category_id: null,
+          pot_size: form.type === "plant" ? form.pot_size : null,
           is_active: form.is_active,
           updated_at: new Date().toISOString(),
-        })
+        };
+
+      if (form.type === "plant") {
+        Object.assign(updatePayload, careGuidePayload(form));
+      } else {
+        updatePayload.watering_days = null;
+        updatePayload.light_level = null;
+        updatePayload.humidity_level = null;
+        updatePayload.care_notes_en = null;
+        updatePayload.care_notes_ar = null;
+      }
+
+      const { error: updateErr } = await supabase
+        .from("products")
+        .update(updatePayload)
         .eq("id", productId);
 
       if (updateErr) throw new Error(updateErr.message);
@@ -156,6 +204,8 @@ export default function EditProductPage() {
           if (invErr) throw new Error(isRTL ? `فشل إضافة المخزون: ${invErr.message}` : `Failed to insert inventory: ${invErr.message}`);
         }
       }
+
+      await saveProductSections(Number(productId), selectedSectionIds);
 
       router.replace("/admin/products");
     } catch (err: any) {
@@ -212,13 +262,36 @@ export default function EditProductPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-5 space-y-4">
             <p className={lbl}>{isRTL ? "إعدادات" : "Settings"}</p>
             <div>
-              <label className={lbl}>{isRTL ? "الفئة" : "Category"}</label>
-              <select value={form.category_id} onChange={e => set("category_id", e.target.value)} className={cls}>
-                <option value="">{isRTL ? "— بدون فئة —" : "— No Category —"}</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+              <label className={lbl}>{isRTL ? "نوع المنتج (سلوك)" : "Product kind"}</label>
+              <select value={form.type} onChange={e => set("type", e.target.value)} className={cls}>
+                <option value="plant">{isRTL ? "نبات" : "Plant"}</option>
+                <option value="pot">{isRTL ? "قصيص" : "Pot"}</option>
+                <option value="accessory">{isRTL ? "إكسسوار" : "Accessory"}</option>
+                <option value="soil">{isRTL ? "تربة" : "Soil"}</option>
+                <option value="vitamin">{isRTL ? "فيتامين" : "Vitamin"}</option>
               </select>
+              <p className="text-[10px] text-[#8aab99] mt-1">
+                {isRTL ? "يحدد خيارات الشراء (أحجام، قصيص، دليل العناية)" : "Controls purchase options (sizes, pot, care guide)"}
+              </p>
+            </div>
+            {form.type === "plant" && (
+              <div>
+                <label className={lbl}>{isRTL ? "حجم القصيص المناسب" : "Required pot size"}</label>
+                <select value={form.pot_size} onChange={e => set("pot_size", e.target.value)} className={cls}>
+                  {(Object.keys(POT_SIZE_LABELS) as PotSize[]).map(s => (
+                    <option key={s} value={s}>{POT_SIZE_LABELS[s][lang]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={lbl}>{isRTL ? "أقسام المتجر" : "Shop sections"}</label>
+              <ProductSectionsPicker
+                sections={shopSections}
+                selectedIds={selectedSectionIds}
+                onChange={setSelectedSectionIds}
+                lang={lang}
+              />
             </div>
             <div>
               <label className={lbl}>{isRTL ? "المخزون" : "Stock"}</label>
@@ -238,26 +311,38 @@ export default function EditProductPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-5 space-y-4">
             <p className={lbl}>{isRTL ? "بيانات المنتج" : "Product Info"}</p>
             <div>
-              <label className={lbl}>{isRTL ? "اسم المنتج *" : "Product Name *"}</label>
-              <input type="text" required value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Peace Lily" className={cls}/>
+              <label className={lbl}>{isRTL ? "الاسم (إنجليزي) *" : "Name (English) *"}</label>
+              <input type="text" required dir="ltr" value={form.name_en} onChange={e => set("name_en", e.target.value)} className={cls}/>
+            </div>
+            <div>
+              <label className={lbl}>{isRTL ? "الاسم (عربي) *" : "Name (Arabic) *"}</label>
+              <input type="text" required dir="rtl" value={form.name_ar} onChange={e => set("name_ar", e.target.value)} className={cls}/>
             </div>
             <div>
               <label className={lbl}>{isRTL ? "الاسم العلمي" : "Scientific Name"}</label>
-              <input type="text" value={form.scientific_name} onChange={e => set("scientific_name", e.target.value)} placeholder="e.g. Spathiphyllum wallisii" className={cls}/>
+              <input type="text" value={form.scientific_name} onChange={e => set("scientific_name", e.target.value)} className={cls}/>
             </div>
             <div>
-              <label className={lbl}>{isRTL ? "الوصف" : "Description"}</label>
-              <textarea rows={4} value={form.description} onChange={e => set("description", e.target.value)}
-                placeholder={isRTL ? "وصف المنتج..." : "Describe the product..."} className={`${cls} resize-none`}/>
+              <label className={lbl}>{isRTL ? "الوصف (إنجليزي)" : "Description (English)"}</label>
+              <textarea rows={3} dir="ltr" value={form.description_en} onChange={e => set("description_en", e.target.value)} className={`${cls} resize-none`}/>
+            </div>
+            <div>
+              <label className={lbl}>{isRTL ? "الوصف (عربي)" : "Description (Arabic)"}</label>
+              <textarea rows={3} dir="rtl" value={form.description_ar} onChange={e => set("description_ar", e.target.value)} className={`${cls} resize-none`}/>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-5 space-y-4">
             <p className={lbl}>{isRTL ? "التسعير" : "Pricing"}</p>
+            <p className="text-xs text-[#5f786c]">
+              {isRTL
+                ? "لو المنتج فيه تركيبات، احفظها بالأسفل — أقل سعر يتحدّث تلقائياً ويظهر «من» على الكارت."
+                : "If this product has variants, save them below — lowest price updates automatically and shows as “From” on cards."}
+            </p>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>{isRTL ? "السعر (EGP) *" : "Price (EGP) *"}</label>
-                <input type="number" required min="0" step="0.01" value={form.price} onChange={e => set("price", e.target.value)} placeholder="0.00" className={cls}/>
+                <label className={lbl}>{isRTL ? "السعر (EGP)" : "Price (EGP)"}</label>
+                <input type="number" min="0" step="0.01" value={form.price} onChange={e => set("price", e.target.value)} placeholder="0.00" className={cls}/>
               </div>
               <div>
                 <label className={lbl}>{isRTL ? "السعر قبل الخصم" : "Compare Price"}</label>
@@ -270,6 +355,22 @@ export default function EditProductPage() {
               </div>
             )}
           </div>
+
+          {(form.type === "plant" || form.type === "pot" || form.type === "accessory") && (
+            <div className="bg-white rounded-2xl shadow-sm border-2 border-[#17583a]/25 p-5 ring-1 ring-[#17583a]/10">
+              <ProductVariantsEditor
+                productId={Number(productId)}
+                basePrice={Number(form.price) || 0}
+                lang={lang}
+                productType={form.type as "plant" | "pot" | "accessory"}
+                onSaved={min => setForm(f => ({ ...f, price: String(min) }))}
+              />
+            </div>
+          )}
+
+          {form.type === "plant" && (
+            <CareGuideEditor form={form} set={set} lang={lang} cls={cls} lbl={lbl} />
+          )}
 
           <div className="flex items-center gap-3 justify-end">
             <button type="button" onClick={() => router.back()}

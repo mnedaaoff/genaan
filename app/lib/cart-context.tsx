@@ -1,18 +1,18 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import type { CartItem, Product, ProductVariant } from "./types";
+import type { CartItem, PotAddon, Product, ProductVariant } from "./types";
 
 interface CartContextValue {
   items: CartItem[];
   count: number;
   subtotal: number;
-  addItem:    (product: Product, variant?: ProductVariant, qty?: number) => void;
+  addItem: (product: Product, variant?: ProductVariant, qty?: number, potAddon?: PotAddon) => void;
   removeItem: (itemId: number) => void;
-  updateQty:  (itemId: number, qty: number) => void;
-  clearCart:  () => void;
+  updateQty: (itemId: number, qty: number) => void;
+  clearCart: () => void;
   isOpen: boolean;
-  openCart:  () => void;
+  openCart: () => void;
   closeCart: () => void;
   isCartOpen: boolean;
   itemCount: number;
@@ -23,11 +23,22 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 const CART_KEY = "genaan_cart";
 
+function lineKey(productId: number, variantId?: number, potAddon?: PotAddon) {
+  if (potAddon) {
+    return `${productId}-pot-${potAddon.pot_product_id}-${potAddon.pot_variant_id}`;
+  }
+  return `${productId}-${variantId ?? "base"}`;
+}
+
+function itemUnitPrice(item: CartItem): number {
+  const base = item.variant?.price ?? item.product.price ?? 0;
+  return base + (item.pot_addon?.price ?? 0);
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Rehydrate
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CART_KEY);
@@ -35,28 +46,42 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
   }, []);
 
-  // Persist on change
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItem = useCallback((product: Product, variant?: ProductVariant, qty = 1) => {
+  const addItem = useCallback((
+    product: Product,
+    variant?: ProductVariant,
+    qty = 1,
+    potAddon?: PotAddon,
+  ) => {
+    const key = lineKey(product.id, variant?.id, potAddon);
     setItems(prev => {
-      const existing = prev.find(
-        i => i.product_id === product.id && i.variant_id === variant?.id
-      );
+      const existing = prev.find(i => lineKey(i.product_id, i.variant_id, i.pot_addon) === key);
       if (existing) {
         return prev.map(i =>
           i.id === existing.id ? { ...i, quantity: i.quantity + qty } : i
         );
       }
+      const unitPrice = (variant?.price ?? product.price) + (potAddon?.price ?? 0);
       const newItem: CartItem = {
         id: Date.now(),
         product_id: product.id,
         variant_id: variant?.id,
         quantity: qty,
-        product: { id: product.id, name: product.name, price: variant?.price ?? product.price, images: product.images, slug: product.slug },
-        variant,
+        product: {
+          id: product.id,
+          name: product.name,
+          price: unitPrice,
+          images: product.images,
+          slug: product.slug,
+          type: product.type,
+        },
+        variant: variant
+          ? { id: variant.id, name: variant.name, price: variant.price, color: variant.color, size: variant.size }
+          : undefined,
+        pot_addon: potAddon,
       };
       return [...prev, newItem];
     });
@@ -75,11 +100,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const clearCart  = useCallback(() => setItems([]), []);
-  const openCart   = useCallback(() => setIsOpen(true), []);
-  const closeCart  = useCallback(() => setIsOpen(false), []);
+  const clearCart = useCallback(() => setItems([]), []);
+  const openCart = useCallback(() => setIsOpen(true), []);
+  const closeCart = useCallback(() => setIsOpen(false), []);
 
-  const count    = items.reduce((s, i) => s + i.quantity, 0);
+  const count = items.reduce((s, i) => s + i.quantity, 0);
 
   const decrementItem = useCallback((itemId: number) => {
     setItems(prev => {
@@ -96,7 +121,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const subtotal = items.reduce((sum, item) => sum + (item.product.price ?? 0) * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + itemUnitPrice(item) * item.quantity, 0);
 
   return (
     <CartContext.Provider value={{
@@ -113,7 +138,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       isOpen,
       isCartOpen: isOpen,
       openCart,
-      closeCart
+      closeCart,
     }}>
       {children}
     </CartContext.Provider>

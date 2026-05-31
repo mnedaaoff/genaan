@@ -1,6 +1,7 @@
 import { CommunitySection } from "./components/landing/CommunitySection";
 import { HeroSection } from "./components/landing/HeroSection";
 import { InnovationSection } from "./components/landing/InnovationSection";
+import { HomepageSections } from "./components/landing/HomepageSections";
 import { ProductsSection } from "./components/landing/ProductsSection";
 import { Navbar } from "./components/ui/Navbar";
 import { Footer } from "./components/ui/Footer";
@@ -17,6 +18,7 @@ export default function Home() {
 
         {/* Remaining sections with standard container */}
         <div className="mx-auto max-w-[1200px] px-5 md:px-8">
+          <HomepageSections />
           <ProductsSection />
           <InnovationSection />
           <CommunitySection />

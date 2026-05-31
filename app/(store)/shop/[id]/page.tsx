@@ -1,12 +1,16 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "../../../lib/types";
 import { useCart } from "../../../lib/cart-context";
 import { useI18n } from "../../../lib/i18n-context";
 import { supabase } from "../../../lib/supabase";
+import { productName, productDescription } from "../../../lib/product-label";
+import { computeListingPrice, formatListingPrice } from "../../../lib/variant-pricing";
+import { PotPurchaseOptions, type PotSelectionState } from "../../../components/shop/PotPurchaseOptions";
+import type { PotProductOption, PotVariantRow } from "../../../lib/pot-utils";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -14,12 +18,21 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const { t, lang } = useI18n();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [potProducts, setPotProducts] = useState<PotProductOption[]>([]);
+  const [potVariants, setPotVariants] = useState<PotVariantRow[]>([]);
+  const [hasVariantPrices, setHasVariantPrices] = useState(false);
+  const [listingPrice, setListingPrice] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [activeTab, setActiveTab] = useState<"description" | "care" | "reviews">("description");
   const [activeImg, setActiveImg] = useState(0);
+  const [selection, setSelection] = useState<PotSelectionState>({ canAdd: true, totalPrice: 0 });
+
+  const handleSelectionChange = useCallback((s: PotSelectionState) => {
+    setSelection(s);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -30,7 +43,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         const { data: p, error: pErr } = await supabase
           .from("products")
           .select(`
-            id, name, slug, scientific_name, description, price, compare_at_price, type, category_id, is_active, rating_avg,
+            id, name, name_en, name_ar, slug, scientific_name, description, description_en, description_ar,
+            price, compare_at_price, type, category_id, is_active, rating_avg, pot_size,
+            watering_days, light_level, humidity_level, care_notes_en, care_notes_ar,
             product_images (url, is_primary),
             inventory (quantity, reserved)
           `)
@@ -43,48 +58,84 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           return;
         }
 
-        // Map database response to Product frontend structure
+        const { data: vars } = await supabase
+          .from("product_variants")
+          .select("id, product_id, name, color, size, price, stock")
+          .eq("product_id", p.id);
+        const variantRows = (vars ?? []) as PotVariantRow[];
+        setPotVariants(variantRows);
+
+        const listing = computeListingPrice(Number(p.price), variantRows);
+        setListingPrice(listing.amount);
+        setHasVariantPrices(listing.fromPrice);
+
+        const hasCare = p.watering_days || p.light_level || p.humidity_level || p.care_notes_en || p.care_notes_ar;
+        const careNotes = lang === "ar"
+          ? (p.care_notes_ar || p.care_notes_en)
+          : (p.care_notes_en || p.care_notes_ar);
+
         const mappedProduct: Product = {
           id: p.id,
-          name: p.name,
+          name: productName(p, lang),
+          name_en: p.name_en,
+          name_ar: p.name_ar,
           slug: p.slug,
           scientific_name: p.scientific_name || undefined,
-          description: p.description || undefined,
-          type: p.type as any,
-          price: Number(p.price),
+          description: productDescription(p, lang),
+          description_en: p.description_en,
+          description_ar: p.description_ar,
+          type: p.type as Product["type"],
+          price: listing.amount,
           compare_at_price: p.compare_at_price ? Number(p.compare_at_price) : undefined,
           category_id: p.category_id || undefined,
-          images: p.product_images ? p.product_images.map((img: any) => ({ url: img.url, id: 0, product_id: p.id, sort_order: 0 })) : [],
+          pot_size: p.pot_size || undefined,
+          images: p.product_images ? p.product_images.map((img: { url: string }) => ({ url: img.url, id: 0, product_id: p.id, sort_order: 0 })) : [],
           inventory: {
             id: 0,
             product_id: p.id,
-            quantity: p.inventory && p.inventory[0] ? p.inventory[0].quantity : 0,
-            reserved: p.inventory && p.inventory[0] ? p.inventory[0].reserved : 0,
-            available: p.inventory && p.inventory[0] 
-              ? Math.max(0, p.inventory[0].quantity - p.inventory[0].reserved)
-              : 0
+            quantity: p.inventory?.[0]?.quantity ?? 0,
+            reserved: p.inventory?.[0]?.reserved ?? 0,
+            available: Math.max(0, (p.inventory?.[0]?.quantity ?? 0) - (p.inventory?.[0]?.reserved ?? 0)),
           },
           avg_rating: p.rating_avg || 4.7,
           review_count: 5,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          // Default care guide settings
-          plant_care: {
+          plant_care: hasCare ? {
             id: 0,
             product_id: p.id,
-            watering_days: 7,
-            light_level: "medium",
-            humidity_level: "medium"
-          },
+            watering_days: p.watering_days ?? 0,
+            light_level: p.light_level ?? "medium",
+            humidity_level: p.humidity_level ?? "medium",
+            care_notes_en: p.care_notes_en,
+            care_notes_ar: p.care_notes_ar,
+            notes: careNotes || undefined,
+          } : undefined,
           reviews: [
             { id: 1, user_id: 1, product_id: p.id, rating: 5, body: lang === "ar" ? "جميلة جداً وحجمها ممتاز ومناسبة للغرفة." : "Very beautiful, perfect size and fits the room nicely.", user: { id: 1, name: lang === "ar" ? "أحمد محمد" : "Ahmed Mohamed" }, created_at: "" },
-            { id: 2, user_id: 2, product_id: p.id, rating: 4, body: lang === "ar" ? "وصلت بحالة صحية ممتازة ومغلفة بشكل جيد." : "Arrived in great health and very well packed.", user: { id: 2, name: lang === "ar" ? "سارة علي" : "Sara Ali" }, created_at: "" }
-          ]
+            { id: 2, user_id: 2, product_id: p.id, rating: 4, body: lang === "ar" ? "وصلت بحالة صحية ممتازة ومغلفة بشكل جيد." : "Arrived in great health and very well packed.", user: { id: 2, name: lang === "ar" ? "سارة علي" : "Sara Ali" }, created_at: "" },
+          ],
         };
 
         setProduct(mappedProduct);
+        setSelection({ canAdd: !listing.fromPrice, totalPrice: listing.amount });
+
+        if (p.type === "plant") {
+          const { data: pots } = await supabase
+            .from("products")
+            .select(`
+              id, name, slug, price,
+              product_images (url, is_primary),
+              product_variants (id, product_id, name, color, size, price, stock)
+            `)
+            .eq("type", "pot")
+            .eq("is_active", true)
+            .order("name");
+          setPotProducts((pots ?? []) as PotProductOption[]);
+        }
+
         setLoading(false);
-      } catch (err: any) {
+      } catch {
         setError("Product not found.");
         setLoading(false);
       }
@@ -94,14 +145,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   }, [id, lang]);
 
   const handleAdd = () => {
-    if (!product) return;
-    addItem(product, undefined, qty);
+    if (!product || !selection.canAdd) return;
+    addItem(product, selection.variant, qty, selection.potAddon);
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
   };
 
-  const LIGHT_LABELS: Record<string, string> = { low: "Low", medium: "Medium", bright: "Bright", direct: "Direct Sun" };
-  const HUM_LABELS:   Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
+  const LIGHT_LABELS: Record<string, Record<"en" | "ar", string>> = {
+    low: { en: "Low", ar: "منخفضة" },
+    medium: { en: "Medium", ar: "متوسطة" },
+    bright: { en: "Bright", ar: "ساطعة" },
+    direct: { en: "Direct Sun", ar: "شمس مباشرة" },
+  };
+  const HUM_LABELS: Record<string, Record<"en" | "ar", string>> = {
+    low: { en: "Low", ar: "منخفضة" },
+    medium: { en: "Medium", ar: "متوسطة" },
+    high: { en: "High", ar: "عالية" },
+  };
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f4f5f1]">
@@ -195,7 +255,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               )}
             </div>
 
-            <p className="text-3xl font-heading font-black text-[#17583a]">EGP {product.price.toFixed(2)}</p>
+            <p className="text-3xl font-heading font-black text-[#17583a]">
+              {selection.variant || selection.potAddon || !hasVariantPrices
+                ? `EGP ${(selection.totalPrice || listingPrice).toFixed(2)}`
+                : formatListingPrice(listingPrice, true, lang)}
+            </p>
+
+            {(product.type === "plant" || product.type === "pot" || product.type === "accessory") && (
+              <PotPurchaseOptions
+                lang={lang}
+                productType={product.type}
+                plantPotSize={product.pot_size}
+                potProducts={potProducts}
+                variants={potVariants}
+                basePrice={product.price}
+                onSelectionChange={handleSelectionChange}
+              />
+            )}
 
             {/* Stock */}
             {product.inventory && (
@@ -220,7 +296,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <button
                 onClick={handleAdd}
-                disabled={isOutOfStock}
+                disabled={isOutOfStock || !selection.canAdd}
                 className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold transition-all ${
                   added
                     ? "bg-[#e8f3ec] text-[#17583a] border-2 border-[#17583a]"
@@ -245,6 +321,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                       activeTab === tab ? "bg-[#17583a] text-white" : "text-[#5f786c] hover:bg-[#f0f2ee]"
                     }`}
+                    style={{ display: tab === "care" && !product.plant_care ? "none" : undefined }}
                   >
                     {tab === "description" ? t.product.description : tab === "care" ? t.product.care_guide : t.product.reviews}
                   </button>
@@ -256,18 +333,35 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               )}
 
               {activeTab === "care" && product.plant_care && (
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: t.product.watering, value: `${product.plant_care.watering_days} ${t.product.days}`, icon: "M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" },
-                    { label: t.product.light,    value: LIGHT_LABELS[product.plant_care.light_level] || product.plant_care.light_level, icon: "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z" },
-                    { label: t.product.humidity, value: HUM_LABELS[product.plant_care.humidity_level] || product.plant_care.humidity_level, icon: "M12 2C6 2 4 8 4 12a8 8 0 0016 0c0-4-2-10-8-10z" },
-                  ].map(item => (
-                    <div key={item.label} className="bg-[#f4f5f1] rounded-xl p-4 text-center">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="1.8" className="mx-auto mb-2"><path d={item.icon}/></svg>
-                      <p className="text-xs font-semibold text-[#8aab99] mb-1">{item.label}</p>
-                      <p className="text-sm font-bold text-[#0d3a24]">{item.value}</p>
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      product.plant_care.watering_days ? {
+                        label: t.product.watering,
+                        value: `${product.plant_care.watering_days} ${t.product.days}`,
+                        icon: "M12 2.69l5.66 5.66a8 8 0 11-11.31 0z",
+                      } : null,
+                      product.plant_care.light_level ? {
+                        label: t.product.light,
+                        value: LIGHT_LABELS[product.plant_care.light_level]?.[lang] || product.plant_care.light_level,
+                        icon: "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z",
+                      } : null,
+                      product.plant_care.humidity_level ? {
+                        label: t.product.humidity,
+                        value: HUM_LABELS[product.plant_care.humidity_level]?.[lang] || product.plant_care.humidity_level,
+                        icon: "M12 2C6 2 4 8 4 12a8 8 0 0016 0c0-4-2-10-8-10z",
+                      } : null,
+                    ].filter(Boolean).map(item => (
+                      <div key={item!.label} className="bg-[#f4f5f1] rounded-xl p-4 text-center">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#17583a" strokeWidth="1.8" className="mx-auto mb-2"><path d={item!.icon}/></svg>
+                        <p className="text-xs font-semibold text-[#8aab99] mb-1">{item!.label}</p>
+                        <p className="text-sm font-bold text-[#0d3a24]">{item!.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {product.plant_care.notes && (
+                    <p className="text-sm text-[#5f786c] leading-7 whitespace-pre-line">{product.plant_care.notes}</p>
+                  )}
                 </div>
               )}
               {activeTab === "care" && !product.plant_care && (

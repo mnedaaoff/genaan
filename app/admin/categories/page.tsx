@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { categoryLabelBoth } from "../../lib/category-label";
 
 interface Category {
   id: number;
   name: string | null;
+  name_en: string | null;
+  name_ar: string | null;
   image: string | null;
   parent_id: number | null;
   created_at: string;
@@ -18,7 +21,7 @@ export default function AdminCategoriesPage() {
   const [error, setError]     = useState("");
   const [lang, setLang]       = useState<"en" | "ar">("en");
   const isRTL = lang === "ar";
-  const [form, setForm] = useState({ name: "", parent_id: "" });
+  const [form, setForm] = useState({ name_en: "", name_ar: "", parent_id: "" });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
 
@@ -29,41 +32,80 @@ export default function AdminCategoriesPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from("categories").select("*").order("id");
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name, name_en, name_ar, image, parent_id, created_at")
+      .order("id");
     setCats((data ?? []) as Category[]);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
+  async function authHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+  }
+
+  const uploadViaApi = async (file: File, categoryId: number): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("bucket", "categories");
+    fd.append("path", `categories/${categoryId}-${Date.now()}.${file.name.split(".").pop()}`);
+    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? "Upload failed");
+    return json.url as string;
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!form.name.trim()) { setError(isRTL ? "الاسم مطلوب" : "Name is required"); return; }
+    const nameEn = form.name_en.trim();
+    const nameAr = form.name_ar.trim();
+    if (!nameEn || !nameAr) {
+      setError(isRTL ? "الاسم بالإنجليزية والعربية مطلوب" : "English and Arabic names are required");
+      return;
+    }
     setSaving(true);
     try {
-      const { data: cat, error: insertErr } = await supabase
-        .from("categories")
-        .insert({ name: form.name.trim(), parent_id: form.parent_id ? Number(form.parent_id) : null })
-        .select("id").single();
-      if (insertErr) throw new Error(insertErr.message);
+      const res = await fetch("/api/admin/categories", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        },
+        body: JSON.stringify({
+          name_en: nameEn,
+          name_ar: nameAr,
+          parent_id: form.parent_id ? Number(form.parent_id) : null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to create category");
+      const cat = json.data as { id: number };
 
-      // Upload image
       if (imageFile && cat) {
-        const ext = imageFile.name.split(".").pop();
-        const path = `categories/${cat.id}-${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("categories").upload(path, imageFile, { upsert: true });
-        if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from("categories").getPublicUrl(path);
-          await supabase.from("categories").update({ image: urlData.publicUrl }).eq("id", cat.id);
-        }
+        const publicUrl = await uploadViaApi(imageFile, cat.id);
+        const patchRes = await fetch("/api/admin/categories", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(await authHeaders()),
+          },
+          body: JSON.stringify({ id: cat.id, image: publicUrl }),
+        });
+        const patchJson = await patchRes.json();
+        if (!patchRes.ok) throw new Error(patchJson.error ?? "Failed to save category image");
       }
 
-      setForm({ name: "", parent_id: "" });
+      setForm({ name_en: "", name_ar: "", parent_id: "" });
       setImageFile(null);
       setImagePreview("");
       await load();
-    } catch (err: any) {
-      setError(err.message ?? "Failed to create category");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create category");
     } finally {
       setSaving(false);
     }
@@ -71,7 +113,15 @@ export default function AdminCategoriesPage() {
 
   const deleteCategory = async (id: number) => {
     if (!confirm(isRTL ? "حذف هذه الفئة؟" : "Delete this category?")) return;
-    await supabase.from("categories").delete().eq("id", id);
+    const res = await fetch(`/api/admin/categories?id=${id}`, {
+      method: "DELETE",
+      headers: await authHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error ?? "Failed to delete category");
+      return;
+    }
     setCats(prev => prev.filter(c => c.id !== id));
   };
 
@@ -86,22 +136,46 @@ export default function AdminCategoriesPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Create form */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-6">
             <h2 className="font-bold text-[#0d3a24] mb-4 text-sm">➕ {isRTL ? "فئة جديدة" : "New Category"}</h2>
             {error && <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600">{error}</div>}
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#0d3a24] mb-1.5 uppercase tracking-wide">{isRTL ? "الاسم *" : "Name *"}</label>
-                <input type="text" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder={isRTL ? "اسم الفئة" : "Category name"} className={inp}/>
+                <label className="block text-xs font-bold text-[#0d3a24] mb-1.5 uppercase tracking-wide">
+                  {isRTL ? "الاسم (إنجليزي) *" : "Name (English) *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  dir="ltr"
+                  value={form.name_en}
+                  onChange={e => setForm(f => ({ ...f, name_en: e.target.value }))}
+                  placeholder="Indoor Plants"
+                  className={inp}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#0d3a24] mb-1.5 uppercase tracking-wide">
+                  {isRTL ? "الاسم (عربي) *" : "Name (Arabic) *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  dir="rtl"
+                  value={form.name_ar}
+                  onChange={e => setForm(f => ({ ...f, name_ar: e.target.value }))}
+                  placeholder="نباتات داخلية"
+                  className={inp}
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#0d3a24] mb-1.5 uppercase tracking-wide">{isRTL ? "الفئة الأم (اختياري)" : "Parent Category"}</label>
                 <select value={form.parent_id} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value }))} className={inp}>
                   <option value="">{isRTL ? "— بدون فئة أم —" : "— None (top level) —"}</option>
-                  {parentCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {parentCats.map(c => (
+                    <option key={c.id} value={c.id}>{categoryLabelBoth(c)}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -126,7 +200,6 @@ export default function AdminCategoriesPage() {
           </div>
         </div>
 
-        {/* List */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] overflow-hidden">
             <div className="px-5 py-4 border-b border-[#f0f2ee] flex items-center justify-between">
@@ -149,8 +222,14 @@ export default function AdminCategoriesPage() {
                           : <div className="w-full h-full flex items-center justify-center text-xl">📂</div>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm text-[#0d3a24]">{cat.name}</p>
-                        {parent && <p className="text-xs text-[#8aab99]">{isRTL ? "ضمن:" : "Under:"} {parent.name}</p>}
+                        <p className="font-semibold text-sm text-[#0d3a24]">{categoryLabelBoth(cat)}</p>
+                        <p className="text-xs text-[#8aab99] mt-0.5" dir="ltr">{cat.name_en || cat.name || "—"}</p>
+                        <p className="text-xs text-[#8aab99]" dir="rtl">{cat.name_ar || cat.name || "—"}</p>
+                        {parent && (
+                          <p className="text-xs text-[#8aab99] mt-1">
+                            {isRTL ? "ضمن:" : "Under:"} {categoryLabelBoth(parent)}
+                          </p>
+                        )}
                       </div>
                       <span className="text-[10px] text-[#8aab99]">#{cat.id}</span>
                       <button onClick={() => deleteCategory(cat.id)} className="text-xs text-red-400 hover:text-red-600 font-semibold">

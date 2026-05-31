@@ -55,7 +55,6 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} ${fugazOne.variable} h-full antialiased`}
     >
       <head>
-        <LangScript />
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
@@ -63,6 +62,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <LangScript />
         <I18nProvider>
           <AuthProvider>
             <CartProvider>{children}</CartProvider>

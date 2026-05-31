@@ -7,15 +7,23 @@ import Link from "next/link";
 import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
 import { supabase } from "../../lib/supabase";
+import { productName } from "../../lib/product-label";
+import { computeListingPrice, formatListingPrice } from "../../lib/variant-pricing";
+import { homepageSectionLabel } from "../../lib/homepage-section-label";
 
-interface Category {
+interface ShopSection {
   id: number;
-  name: string;
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  sort_order: number;
 }
 
 interface Product {
   id: number;
   name: string;
+  name_en?: string | null;
+  name_ar?: string | null;
   description: string | null;
   price: number;
   compare_at_price: number | null;
@@ -25,6 +33,9 @@ interface Product {
   rating_avg: number;
   product_images: { url: string; is_primary: boolean }[];
   inventory: { quantity: number; reserved: number }[];
+  product_variants?: { price: number }[];
+  display_price?: number;
+  price_from?: boolean;
 }
 
 type SortKey = "newest" | "price_asc" | "price_desc" | "rating";
@@ -41,38 +52,48 @@ function ShopPageInner() {
   const router = useRouter();
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [shopSections, setShopSections] = useState<ShopSection[]>([]);
+  const [productSectionLabels, setProductSectionLabels] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState<number | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [inStockOnly, setInStockOnly] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
   const [maxPrice, setMaxPrice] = useState(10000);
   const [showFilters, setShowFilters] = useState(false);
+  const [sectionSlug, setSectionSlug] = useState<string | null>(null);
+  const [sectionTitle, setSectionTitle] = useState<string | null>(null);
+  const [sectionProductIds, setSectionProductIds] = useState<number[] | null>(null);
 
   // Load categories and products
   useEffect(() => {
     async function loadData() {
-      // 1. Fetch Categories
-      const { data: cats, error: catsErr } = await supabase
-        .from("categories")
-        .select("id, name")
-        .order("id");
-      
-      let fetchedCategories: Category[] = [];
-      if (!catsErr && cats) {
-        fetchedCategories = cats;
-        setCategories(cats);
-      }
+      const { data: sections } = await supabase
+        .from("homepage_sections")
+        .select("id, slug, name_en, name_ar, sort_order")
+        .eq("is_active", true)
+        .order("sort_order");
+      setShopSections((sections ?? []) as ShopSection[]);
 
-      // 2. Fetch Products
+      const { data: links } = await supabase
+        .from("homepage_section_products")
+        .select("product_id, section_id, homepage_sections(name_en, name_ar)");
+      const labelMap: Record<number, string> = {};
+      for (const link of links ?? []) {
+        if (labelMap[link.product_id]) continue;
+        const sec = link.homepage_sections as { name_en?: string; name_ar?: string } | null;
+        if (sec) labelMap[link.product_id] = homepageSectionLabel(sec, lang);
+      }
+      setProductSectionLabels(labelMap);
+
       const { data: prodsData, error: prodsErr } = await supabase
         .from("products")
         .select(`
-          id, name, description, price, compare_at_price, type, category_id, is_active, rating_avg,
+          id, name, name_en, name_ar, description, price, compare_at_price, type, category_id, is_active, rating_avg,
           product_images (url, is_primary),
-          inventory (quantity, reserved)
+          inventory (quantity, reserved),
+          product_variants (price)
         `)
         .eq("is_active", true)
         .order("created_at", { ascending: false });
@@ -80,7 +101,16 @@ function ShopPageInner() {
       if (prodsErr) {
         console.error("Failed to load products:", prodsErr.message);
       } else {
-        const prods = (prodsData ?? []) as unknown as Product[];
+        const prods = (prodsData ?? []).map((row: Product) => {
+          const listing = computeListingPrice(toNum(row.price), row.product_variants ?? []);
+          return {
+            ...row,
+            name: productName(row, lang),
+            display_price: listing.amount,
+            price_from: listing.fromPrice,
+            price: listing.amount,
+          };
+        }) as Product[];
         setProducts(prods);
         const mp = Math.max(...prods.map(p => toNum(p.price)), 500);
         setMaxPrice(Math.ceil(mp / 100) * 100);
@@ -91,46 +121,60 @@ function ShopPageInner() {
     }
 
     loadData();
-  }, []);
+  }, [lang]);
 
-  // Sync category filter with URL query params
   useEffect(() => {
-    const urlCategory = searchParams.get("category");
-    if (urlCategory) {
-      if (urlCategory === "all") {
-        setCategoryFilter("all");
-      } else {
-        const catId = parseInt(urlCategory, 10);
-        if (!isNaN(catId)) {
-          setCategoryFilter(catId);
-        }
-      }
-    } else {
-      // Fallback/Legacy query support (e.g. ?type=plant)
-      const urlType = searchParams.get("type");
-      if (urlType) {
-        if (urlType === "plant") {
-          // Find first plant-like category if any
-          const plantCat = categories.find(c => c.name.includes("نبات"));
-          if (plantCat) setCategoryFilter(plantCat.id);
-        } else if (urlType === "accessory") {
-          const accCat = categories.find(c => c.name.includes("بذور") || c.name.includes("إكسسوار"));
-          if (accCat) setCategoryFilter(accCat.id);
-        }
-      }
+    const urlSection = searchParams.get("section");
+    if (!urlSection) {
+      setSectionSlug(null);
+      setSectionTitle(null);
+      setSectionProductIds(null);
+      return;
     }
-  }, [searchParams, categories]);
 
-  const handleCategoryChange = (catId: number | "all") => {
-    setCategoryFilter(catId);
-    const params = new URLSearchParams(searchParams.toString());
-    if (catId === "all") {
-      params.delete("category");
-    } else {
-      params.set("category", String(catId));
+    async function loadSection() {
+      const { data: sec } = await supabase
+        .from("homepage_sections")
+        .select(`
+          id, slug, name_en, name_ar,
+          homepage_section_products (product_id, sort_order)
+        `)
+        .eq("slug", urlSection)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!sec) {
+        setSectionSlug(urlSection);
+        setSectionTitle(urlSection);
+        setSectionProductIds([]);
+        return;
+      }
+
+      setSectionSlug(urlSection);
+      setSectionTitle(homepageSectionLabel(sec, lang));
+      const ids = (sec.homepage_section_products ?? [])
+        .sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order)
+        .map((p: { product_id: number }) => p.product_id);
+      setSectionProductIds(ids);
     }
-    params.delete("type"); // Clear legacy param if any
-    router.push(`/shop?${params.toString()}`);
+    loadSection();
+  }, [searchParams, lang]);
+
+  useEffect(() => {
+    const urlType = searchParams.get("type");
+    if (urlType) setTypeFilter(urlType);
+  }, [searchParams]);
+
+  const handleSectionChange = (slug: string | "all") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("category");
+    params.delete("type");
+    if (slug === "all") {
+      params.delete("section");
+    } else {
+      params.set("section", slug);
+    }
+    router.push(params.toString() ? `/shop?${params.toString()}` : "/shop");
   };
 
   const getImage = (p: Product) =>
@@ -145,14 +189,18 @@ function ShopPageInner() {
   // Filter + sort
   const filtered = products
     .filter(p => {
-      const matchCategory = categoryFilter === "all" || p.category_id === categoryFilter;
+      const matchType = typeFilter === "all" || p.type === typeFilter;
       const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-      const matchPrice = toNum(p.price) >= priceRange[0] && toNum(p.price) <= priceRange[1];
+      const matchPrice = toNum(p.display_price ?? p.price) >= priceRange[0] && toNum(p.display_price ?? p.price) <= priceRange[1];
       const stock = getStock(p);
       const matchStock = !inStockOnly || (stock === null || stock > 0);
-      return matchCategory && matchSearch && matchPrice && matchStock;
+      const matchSection = sectionProductIds === null || sectionProductIds.includes(p.id);
+      return matchType && matchSearch && matchPrice && matchStock && matchSection;
     })
     .sort((a, b) => {
+      if (sectionProductIds && sectionProductIds.length > 0) {
+        return sectionProductIds.indexOf(a.id) - sectionProductIds.indexOf(b.id);
+      }
       if (sort === "price_asc") return toNum(a.price) - toNum(b.price);
       if (sort === "price_desc") return toNum(b.price) - toNum(a.price);
       if (sort === "rating") return toNum(b.rating_avg) - toNum(a.rating_avg);
@@ -175,15 +223,26 @@ function ShopPageInner() {
     rating:     { en: "Top Rated",      ar: "الأعلى تقييماً" },
   };
 
-  const activeFilters = (categoryFilter !== "all" ? 1 : 0) + (inStockOnly ? 1 : 0) + (priceRange[0] > 0 || priceRange[1] < maxPrice ? 1 : 0);
+  const activeFilters = (inStockOnly ? 1 : 0) + (priceRange[0] > 0 || priceRange[1] < maxPrice ? 1 : 0) + (sectionSlug ? 1 : 0) + (typeFilter !== "all" ? 1 : 0);
 
   return (
     <div className="bg-[#f4f5f1] min-h-screen" dir={isRTL ? "rtl" : "ltr"}>
       {/* Compact Header */}
       <div className="bg-[#17583a] py-8 px-5">
         <div className="mx-auto max-w-[1200px]">
-          <h1 className="text-2xl md:text-3xl font-heading font-black text-white">{t.shop.title}</h1>
-          <p className="text-[#a8c7b6] text-xs mt-1 max-w-sm">{t.shop.subtitle}</p>
+          <h1 className="text-2xl md:text-3xl font-heading font-black text-white">
+            {sectionTitle ?? t.shop.title}
+          </h1>
+          <p className="text-[#a8c7b6] text-xs mt-1 max-w-sm">
+            {sectionTitle
+              ? (lang === "ar" ? "منتجات هذا القسم" : "Products in this collection")
+              : t.shop.subtitle}
+          </p>
+          {sectionSlug && (
+            <Link href="/shop" className="inline-block mt-3 text-xs font-semibold text-white/90 hover:text-white underline">
+              {lang === "ar" ? "← كل المنتجات" : "← All products"}
+            </Link>
+          )}
         </div>
       </div>
 
@@ -191,24 +250,24 @@ function ShopPageInner() {
         {/* Controls row */}
         <div className="flex flex-wrap gap-3 items-center mb-6">
           {/* Type pills */}
-          <div className="flex gap-1.5 overflow-x-auto flex-1 min-w-0 pb-1">
+          <div className="flex gap-1.5 overflow-x-auto flex-1 min-w-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
-              onClick={() => handleCategoryChange("all")}
+              onClick={() => handleSectionChange("all")}
               className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                categoryFilter === "all" ? "bg-[#17583a] text-white" : "bg-white text-[#5f786c] hover:bg-[#e4ece7]"
+                !sectionSlug ? "bg-[#17583a] text-white" : "bg-white text-[#5f786c] hover:bg-[#e4ece7]"
               }`}
             >
               {lang === "ar" ? "الكل" : "All"}
             </button>
-            {categories.map(cat => (
+            {shopSections.map(sec => (
               <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id)}
+                key={sec.id}
+                onClick={() => handleSectionChange(sec.slug)}
                 className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                  categoryFilter === cat.id ? "bg-[#17583a] text-white" : "bg-white text-[#5f786c] hover:bg-[#e4ece7]"
+                  sectionSlug === sec.slug ? "bg-[#17583a] text-white" : "bg-white text-[#5f786c] hover:bg-[#e4ece7]"
                 }`}
               >
-                {(t.shop.categories as Record<string, string>)[cat.name] ?? cat.name}
+                {homepageSectionLabel(sec, lang)}
               </button>
             ))}
           </div>
@@ -292,7 +351,7 @@ function ShopPageInner() {
             {/* Reset */}
             <button
               onClick={() => {
-                setCategoryFilter("all"); setInStockOnly(false); setPriceRange([0, maxPrice]); setSearch(""); setSort("newest");
+                setInStockOnly(false); setPriceRange([0, maxPrice]); setSearch(""); setSort("newest"); setTypeFilter("all");
                 router.push("/shop");
               }}
               className="text-xs text-[#17583a] font-semibold hover:underline shrink-0"
@@ -324,10 +383,8 @@ function ShopPageInner() {
             {filtered.map(product => {
               const imgUrl = getImage(product);
               const stock = getStock(product);
-              const categoryName = categories.find(c => c.id === product.category_id)?.name;
-              const displayCategory = categoryName 
-                ? ((t.shop.categories as Record<string, string>)[categoryName] ?? categoryName) 
-                : (TYPE_LABELS[product.type]?.[lang] ?? product.type);
+              const displayCategory = productSectionLabels[product.id]
+                ?? (TYPE_LABELS[product.type]?.[lang] ?? product.type);
 
               return (
                 <div key={product.id} className="group bg-white rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow flex flex-col">
@@ -368,8 +425,10 @@ function ShopPageInner() {
                     </h3>
                     <div className="mt-auto flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-[#17583a]">EGP {toNum(product.price).toFixed(2)}</span>
-                        {product.compare_at_price && product.compare_at_price > product.price && (
+                        <span className="font-bold text-[#17583a]">
+                          {formatListingPrice(toNum(product.display_price ?? product.price), !!product.price_from, lang)}
+                        </span>
+                        {product.compare_at_price && product.compare_at_price > toNum(product.display_price ?? product.price) && (
                           <span className="text-xs text-[#8aab99] line-through ms-2">
                             EGP {toNum(product.compare_at_price).toFixed(2)}
                           </span>
@@ -401,9 +460,17 @@ function ShopPageInner() {
           </div>
         ) : (
           <div className="text-center py-20 bg-white rounded-3xl shadow-sm">
-            <p className="text-4xl mb-4">🔍</p>
-            <p className="font-semibold text-[#0d3a24] mb-1">{t.shop.no_results}</p>
-            <p className="text-[#5f786c] text-sm">{t.shop.try_another}</p>
+            <p className="text-4xl mb-4">{sectionSlug && sectionProductIds?.length === 0 ? "📦" : "🔍"}</p>
+            <p className="font-semibold text-[#0d3a24] mb-1">
+              {sectionSlug && sectionProductIds?.length === 0
+                ? (lang === "ar" ? "لا توجد منتجات في هذا القسم بعد" : "No products in this section yet")
+                : t.shop.no_results}
+            </p>
+            <p className="text-[#5f786c] text-sm">
+              {sectionSlug && sectionProductIds?.length === 0
+                ? (lang === "ar" ? "عيّن منتجات لهذا القسم من الداشبورد (المنتجات أو الصفحة الرئيسية)." : "Assign products to this section from the dashboard.")
+                : t.shop.try_another}
+            </p>
           </div>
         )}
       </div>

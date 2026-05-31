@@ -96,7 +96,7 @@ function AdminLoginForm() {
         <div className="bg-white rounded-3xl shadow-2xl p-8">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="text-4xl mb-3">🌿</div>
+            <img src="/favicon.ico" alt="Genaan" className="w-14 h-14 rounded-2xl mx-auto mb-3" />
             <h1 className="text-2xl font-black text-[#0d3a24]">Genaan Admin</h1>
             <p className="text-sm text-[#5f786c] mt-1">
               {isRTL ? "لوحة تحكم المتجر — للمدراء فقط" : "Store Control Panel — Admins Only"}

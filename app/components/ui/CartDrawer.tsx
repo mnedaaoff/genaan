@@ -90,7 +90,19 @@ export function CartDrawer() {
                   </div>
                   <div className="flex-1 flex flex-col justify-between">
                     <div className="flex justify-between items-start gap-2">
-                      <h3 className="font-semibold text-[#0d3a24] text-sm leading-tight line-clamp-2 pr-4">{item.product.name}</h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-[#0d3a24] text-sm leading-tight line-clamp-2">{item.product.name}</h3>
+                        {item.variant && (
+                          <p className="text-[10px] text-[#8aab99] mt-0.5">
+                            {item.variant.color}{item.variant.size ? ` · ${item.variant.size}` : ""}
+                          </p>
+                        )}
+                        {item.pot_addon && (
+                          <p className="text-[10px] text-[#17583a] mt-0.5">
+                            + {item.pot_addon.pot_name} ({item.pot_addon.color})
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => removeItem(item.id)}
                         className="text-[#8aab99] hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100 -mr-2 -mt-2"

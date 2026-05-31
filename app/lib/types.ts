@@ -36,6 +36,8 @@ export type ProductType = "plant" | "pot" | "soil" | "vitamin" | "accessory";
 export interface Category {
   id: number;
   name: string;
+  name_en?: string | null;
+  name_ar?: string | null;
   slug: string;
   parent_id?: number;
   children?: Category[];
@@ -56,6 +58,17 @@ export interface ProductVariant {
   sku?: string;
   price?: number;
   stock?: number;
+  color?: string | null;
+  size?: string | null;
+}
+
+export interface PotAddon {
+  pot_product_id: number;
+  pot_variant_id: number;
+  pot_name: string;
+  color: string;
+  size: string;
+  price: number;
 }
 
 export interface ProductAttribute {
@@ -72,6 +85,8 @@ export interface PlantCare {
   light_level: "low" | "medium" | "bright" | "direct";
   humidity_level: "low" | "medium" | "high";
   notes?: string;
+  care_notes_en?: string | null;
+  care_notes_ar?: string | null;
 }
 
 export interface InventoryRecord {
@@ -99,13 +114,18 @@ export interface InventoryLog {
 export interface Product {
   id: number;
   name: string;
+  name_en?: string | null;
+  name_ar?: string | null;
   slug: string;
   scientific_name?: string;
   description?: string;
+  description_en?: string | null;
+  description_ar?: string | null;
   type: ProductType;
   price: number;
   compare_at_price?: number | null;
   category_id?: number;
+  pot_size?: string | null;
   category?: Category;
   images?: ProductImage[];
   variants?: ProductVariant[];
@@ -126,8 +146,9 @@ export interface CartItem {
   product_id: number;
   variant_id?: number;
   quantity: number;
-  product: Pick<Product, "id" | "name" | "price" | "images" | "slug">;
-  variant?: Pick<ProductVariant, "id" | "name" | "price">;
+  product: Pick<Product, "id" | "name" | "price" | "images" | "slug"> & { type?: ProductType };
+  variant?: Pick<ProductVariant, "id" | "name" | "price" | "color" | "size">;
+  pot_addon?: PotAddon;
 }
 
 export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";

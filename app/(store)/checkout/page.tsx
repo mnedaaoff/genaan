@@ -249,13 +249,39 @@ export default function CheckoutPage() {
       setPlacedOrderId(order.id);
 
       // 4. Create order items — only columns that exist in order_items schema
-      const orderItems = items.map(item => ({
-        order_id: order.id,
-        product_id: item.product_id,
-        variant_id: item.variant?.id ?? null,
-        quantity: item.quantity,
-        price: toNum(item.variant?.price ?? item.product.price),
-      }));
+      const orderItems = items.flatMap(item => {
+        const lines: {
+          order_id: number;
+          product_id: number;
+          variant_id: number | null;
+          quantity: number;
+          price: number;
+        }[] = [];
+
+        const plantOrBasePrice = item.pot_addon
+          ? toNum((item.product.price ?? 0) - item.pot_addon.price)
+          : toNum(item.variant?.price ?? item.product.price);
+
+        lines.push({
+          order_id: order.id,
+          product_id: item.product_id,
+          variant_id: item.variant_id ?? null,
+          quantity: item.quantity,
+          price: plantOrBasePrice,
+        });
+
+        if (item.pot_addon) {
+          lines.push({
+            order_id: order.id,
+            product_id: item.pot_addon.pot_product_id,
+            variant_id: item.pot_addon.pot_variant_id,
+            quantity: item.quantity,
+            price: toNum(item.pot_addon.price),
+          });
+        }
+
+        return lines;
+      });
 
       const { error: itemsErr } = await supabase.from("order_items").insert(orderItems);
       if (itemsErr) console.warn("Order items insert error:", itemsErr.message);

@@ -6,53 +6,89 @@ import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import { productName } from "../../lib/product-label";
+import { computeListingPrice, formatListingPrice } from "../../lib/variant-pricing";
 
 interface Product {
-  id: string;
+  id: number;
   name: string;
-  description?: string;
+  name_en?: string | null;
+  name_ar?: string | null;
+  description?: string | null;
+  description_en?: string | null;
+  description_ar?: string | null;
   price: number;
   compare_at_price?: number;
   type?: string;
-  category_id?: number;
   product_images?: { url: string; is_primary: boolean }[];
   inventory?: { quantity: number; reserved: number }[];
+  product_variants?: { price: number }[];
+  display_price?: number;
+  price_from?: boolean;
 }
 
 export function ProductsSection() {
   const { addItem } = useCart();
   const { t, lang, isRTL } = useI18n();
-  const [added, setAdded] = useState<string | null>(null);
+  const [added, setAdded] = useState<number | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProducts() {
       try {
+        const { data: bestRows } = await supabase
+          .from("homepage_best_sellers")
+          .select("product_id, sort_order")
+          .order("sort_order");
+
+        const bestIds = (bestRows ?? []).map(r => r.product_id);
+
+        if (bestIds.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase
           .from("products")
           .select(`
           id,
           name,
+          name_en,
+          name_ar,
           description,
+          description_en,
+          description_ar,
           price,
           compare_at_price,
           type,
-          category_id,
           is_active,
-          rating_avg,
           product_images (url, is_primary),
-          inventory (quantity, reserved)
+          inventory (quantity, reserved),
+          product_variants (price)
         `)
-          .eq("is_active", true)
-          .order("rating_avg", { ascending: false })
-          .limit(4);
+          .in("id", bestIds)
+          .eq("is_active", true);
 
         if (error) {
           console.warn("Products fetch error:", error.message);
           setProducts([]);
         } else {
-          setProducts((data ?? []) as unknown as Product[]);
+          const byId = new Map(
+            (data ?? []).map(row => {
+              const listing = computeListingPrice(Number(row.price), row.product_variants ?? []);
+              return [row.id, {
+                ...row,
+                name: productName(row, lang),
+                display_price: listing.amount,
+                price_from: listing.fromPrice,
+                price: listing.amount,
+              }];
+            })
+          );
+          const ordered = bestIds.map(id => byId.get(id)).filter(Boolean) as Product[];
+          setProducts(ordered);
         }
       } catch (err) {
         console.error(err);
@@ -63,7 +99,7 @@ export function ProductsSection() {
     }
 
     fetchProducts();
-  }, []);
+  }, [lang]);
 
   const handleAdd = (p: Product) => {
     const imgUrl = p.product_images?.find(i => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null;
@@ -72,7 +108,7 @@ export function ProductsSection() {
     addItem({
       id: p.id as any,
       name: p.name,
-      price: p.price,
+      price: p.display_price ?? p.price,
       images: imgUrl ? [{ url: imgUrl }] : [],
       stock: stock,
       type: p.type ?? "plant",
@@ -129,15 +165,17 @@ export function ProductsSection() {
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {products.map(p => {
           const imgUrl = p.product_images?.find(i => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null;
-          const name = p.name;
-          const description = p.description;
+          const displayPrice = p.display_price ?? p.price;
+          const description = lang === "ar"
+            ? (p.description_ar || p.description_en || p.description)
+            : (p.description_en || p.description_ar || p.description);
           return (
             <article key={p.id} className="group rounded-2xl bg-white shadow-sm overflow-hidden card-hover flex flex-col hover:shadow-md transition-shadow duration-300">
               <Link href={`/shop/${p.id}`} className="relative h-52 overflow-hidden bg-[#f0f2ee] block">
                 {imgUrl ? (
                   <Image
                     src={imgUrl}
-                    alt={name}
+                    alt={p.name}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover group-hover:scale-105 transition-transform duration-500"
@@ -148,20 +186,22 @@ export function ProductsSection() {
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                {p.compare_at_price && p.compare_at_price > p.price && (
+                {p.compare_at_price && p.compare_at_price > displayPrice && (
                   <div className="absolute top-2 left-2 bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
-                    {Math.round((1 - p.price / p.compare_at_price) * 100)}% {lang === "ar" ? "خصم" : "OFF"}
+                    {Math.round((1 - displayPrice / p.compare_at_price) * 100)}% {lang === "ar" ? "خصم" : "OFF"}
                   </div>
                 )}
               </Link>
               <div className="p-4 flex-1 flex flex-col">
                 <p className="text-[10px] uppercase tracking-[0.15em] font-semibold text-[#6a8377] mb-1">{p.type || "Plant"}</p>
-                <h3 className="font-heading font-bold text-[#0d3a24] leading-tight">{name}</h3>
+                <h3 className="font-heading font-bold text-[#0d3a24] leading-tight">{p.name}</h3>
                 <p className="text-xs text-[#8aab99] mt-1 flex-1 line-clamp-2">{description || ""}</p>
                 <div className="mt-4 flex items-center justify-between">
                   <div>
-                    <span className="text-base font-black font-heading text-[#17583a]">EGP {Number(p.price).toFixed(2)}</span>
-                    {p.compare_at_price && p.compare_at_price > p.price && (
+                    <span className="text-base font-black font-heading text-[#17583a]">
+                      {formatListingPrice(displayPrice, !!p.price_from, lang)}
+                    </span>
+                    {p.compare_at_price && p.compare_at_price > displayPrice && (
                       <span className="text-xs text-[#8aab99] line-through ms-2">EGP {Number(p.compare_at_price).toFixed(2)}</span>
                     )}
                   </div>
