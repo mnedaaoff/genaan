@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { getAdminAuthHeaders } from "../../lib/admin-auth";
 import { categoryLabelBoth } from "../../lib/category-label";
 
 interface Category {
@@ -41,13 +42,6 @@ export default function AdminCategoriesPage() {
   }
   useEffect(() => { load(); }, []);
 
-  async function authHeaders() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {};
-  }
-
   const uploadViaApi = async (file: File, categoryId: number): Promise<string> => {
     const fd = new FormData();
     fd.append("file", file);
@@ -72,10 +66,7 @@ export default function AdminCategoriesPage() {
     try {
       const res = await fetch("/api/admin/categories", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(await authHeaders()),
-        },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({
           name_en: nameEn,
           name_ar: nameAr,
@@ -90,10 +81,7 @@ export default function AdminCategoriesPage() {
         const publicUrl = await uploadViaApi(imageFile, cat.id);
         const patchRes = await fetch("/api/admin/categories", {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(await authHeaders()),
-          },
+          headers: await getAdminAuthHeaders(),
           body: JSON.stringify({ id: cat.id, image: publicUrl }),
         });
         const patchJson = await patchRes.json();
@@ -115,7 +103,7 @@ export default function AdminCategoriesPage() {
     if (!confirm(isRTL ? "حذف هذه الفئة؟" : "Delete this category?")) return;
     const res = await fetch(`/api/admin/categories?id=${id}`, {
       method: "DELETE",
-      headers: await authHeaders(),
+      headers: await getAdminAuthHeaders(),
     });
     const json = await res.json();
     if (!res.ok) {
