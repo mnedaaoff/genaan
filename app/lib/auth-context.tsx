@@ -2,9 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
+import { resolveIsAdmin } from "./admin-status";
 import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
-
-// ─── Shape ────────────────────────────────────────────────────────────────────
 
 interface AppUser {
   id: number | string;
@@ -28,21 +27,17 @@ interface AuthContextValue extends AuthState {
   isAdmin:  boolean;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function toAppUser(su: SupabaseUser, session: Session): AppUser {
+function toAppUser(su: SupabaseUser, is_admin: boolean): AppUser {
   const meta = su.user_metadata ?? {};
   return {
     id:         su.id,
     name:       meta.full_name ?? meta.name ?? su.email ?? "User",
     email:      su.email ?? "",
-    is_admin:   meta.is_admin === true || meta.role === "admin",
+    is_admin,
     created_at: su.created_at,
     updated_at: su.updated_at ?? su.created_at,
   };
 }
-
-// ─── Context ──────────────────────────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -51,43 +46,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null, token: null, isLoading: true,
   });
 
-  // Rehydrate session from Supabase on mount
+  const applySession = useCallback(async (session: Session | null) => {
+    if (!session) {
+      setState({ user: null, token: null, isLoading: false });
+      return;
+    }
+    const is_admin = await resolveIsAdmin(session.user);
+    setState({
+      user:      toAppUser(session.user, is_admin),
+      token:     session.access_token,
+      isLoading: false,
+    });
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setState({
-          user:      toAppUser(session.user, session),
-          token:     session.access_token,
-          isLoading: false,
-        });
-      } else {
-        setState(s => ({ ...s, isLoading: false }));
-      }
+      void applySession(session);
     });
 
-    // Listen for sign-in / sign-out events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setState({
-          user:      toAppUser(session.user, session),
-          token:     session.access_token,
-          isLoading: false,
-        });
-      } else {
-        setState({ user: null, token: null, isLoading: false });
-      }
+      void applySession(session);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [applySession]);
 
-  // ── Login ──────────────────────────────────────────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
   }, []);
 
-  // ── Register ───────────────────────────────────────────────────────────────
   const register = useCallback(async (
     firstName: string,
     lastName: string,
@@ -103,7 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw new Error(error.message);
 
-    // Upsert profile row so checkout & other pages can read name/phone immediately
     if (data.user) {
       await supabase.from("profiles").upsert({
         id: data.user.id,
@@ -115,7 +102,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { revalidateStorefrontCache } from "../../lib/revalidate-storefront";
+import { CACHE_TAGS } from "../../lib/cache/tags";
 
 interface FAQ { id: number; question: string | null; answer: string | null; sort_order: number; }
 interface Setting { key: string; value: string | null; type: string; }
@@ -73,6 +75,7 @@ export default function AdminSettingsPage() {
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      await revalidateStorefrontCache(CACHE_TAGS.settings);
     } catch (err) { console.error(err); }
     setSaving(false);
   };
@@ -85,6 +88,7 @@ export default function AdminSettingsPage() {
     if (data) setFaqs(prev => [...prev, data as FAQ]);
     setFaqForm({ question: "", answer: "" });
     setFaqSaving(false);
+    await revalidateStorefrontCache(CACHE_TAGS.settings);
   };
 
   const deleteFaq = async (id: number) => {

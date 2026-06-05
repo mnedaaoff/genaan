@@ -106,7 +106,7 @@ function VariantPicker({
           <div className="flex flex-wrap gap-2">
             {sizes.map(size => {
               const variantForSize = findVariantBySelection(variants, {
-                color: selectedColor || undefined,
+                color: selectedColor,
                 size,
               });
               const sizePrice = variantForSize?.price ?? basePrice;

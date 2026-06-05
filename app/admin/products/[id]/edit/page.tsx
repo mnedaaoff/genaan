@@ -8,6 +8,7 @@ import { ProductSectionsPicker } from "../../../../components/admin/ProductSecti
 import { CareGuideEditor, careGuidePayload } from "../../../../components/admin/CareGuideEditor";
 import { saveProductSections, type HomepageSectionOption } from "../../../../lib/product-sections";
 import { POT_SIZE_LABELS, type PotSize } from "../../../../lib/pot-utils";
+import { getAdminUploadHeaders } from "../../../../lib/admin-auth";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -132,7 +133,11 @@ export default function EditProductPage() {
     fd.append("bucket", "products");
     fd.append("product_id", productId);
     if (existingImgId) fd.append("existing_image_id", String(existingImgId));
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+    const res = await fetch("/api/admin/upload", {
+      method: "POST",
+      headers: await getAdminUploadHeaders(),
+      body: fd,
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? "Upload failed");
     return json.url as string;

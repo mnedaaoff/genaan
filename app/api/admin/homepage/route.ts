@@ -1,5 +1,12 @@
+import { revalidateTag } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TAGS } from "../../../lib/cache/tags";
 import { getAdminClient } from "../../../lib/get-admin-client";
+
+function bustHomepageCache() {
+  revalidateTag(CACHE_TAGS.homepage, "max");
+  revalidateTag(CACHE_TAGS.products, "max");
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -216,6 +223,7 @@ export async function PATCH(req: NextRequest) {
         .single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      bustHomepageCache();
       return NextResponse.json({ data });
     }
 
@@ -226,6 +234,7 @@ export async function PATCH(req: NextRequest) {
       }
       const { error } = await admin.client.from("homepage_sections").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      bustHomepageCache();
       return NextResponse.json({ ok: true });
     }
 
@@ -246,6 +255,7 @@ export async function PATCH(req: NextRequest) {
 
       const { error } = await admin.client.from("homepage_sections").update(payload).eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      bustHomepageCache();
       return NextResponse.json({ ok: true });
     }
 
@@ -271,6 +281,7 @@ export async function PATCH(req: NextRequest) {
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      bustHomepageCache();
       return NextResponse.json({ ok: true });
     }
 
@@ -290,6 +301,7 @@ export async function PATCH(req: NextRequest) {
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      bustHomepageCache();
       return NextResponse.json({ ok: true });
     }
 

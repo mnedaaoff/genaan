@@ -6,26 +6,49 @@ import { ProductsSection } from "./components/landing/ProductsSection";
 import { Navbar } from "./components/ui/Navbar";
 import { Footer } from "./components/ui/Footer";
 import { CartDrawer } from "./components/ui/CartDrawer";
+import {
+  getCachedBestSellerProducts,
+  getCachedHomepageSections,
+  getCachedPublicSettings,
+} from "./lib/cache/public-data";
 
-export default function Home() {
+export const revalidate = 300;
+
+export default async function Home() {
+  const [sections, bestSellerProducts, settings] = await Promise.all([
+    getCachedHomepageSections(),
+    getCachedBestSellerProducts(),
+    getCachedPublicSettings([
+      "social_instagram",
+      "social_facebook",
+      "contact_whatsapp",
+      "social_telegram",
+    ]),
+  ]);
+
+  const socials = {
+    instagram: settings.social_instagram || "#",
+    facebook: settings.social_facebook || "#",
+    whatsapp: settings.contact_whatsapp
+      ? `https://wa.me/${settings.contact_whatsapp.replace(/\D/g, "")}`
+      : "#",
+    telegram: settings.social_telegram || "#",
+  };
+
   return (
     <>
       <Navbar />
       <CartDrawer />
       <main className="flex-1">
-        {/* Full-width hero — no container */}
         <HeroSection />
-
-        {/* Remaining sections with standard container */}
         <div className="mx-auto max-w-[1200px] px-5 md:px-8">
-          <HomepageSections />
-          <ProductsSection />
+          <HomepageSections initialSections={sections} />
+          <ProductsSection initialProducts={bestSellerProducts} />
           <InnovationSection />
           <CommunitySection />
         </div>
       </main>
-      <Footer />
+      <Footer initialSocials={socials} />
     </>
   );
 }
-

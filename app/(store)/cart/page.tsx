@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
-import { coupons as couponsApi } from "../../lib/api";
+import { validateCouponCode } from "../../lib/coupons-client";
 
 /** Safely converts any value (including string from API) to a float */
 function toNum(v: unknown): number {
@@ -29,11 +29,12 @@ export default function CartPage() {
     setCouponApplying(true);
     setCouponError("");
     try {
-      const res: any = await couponsApi.apply(couponCode.trim(), subtotal);
-      setCouponDiscount(toNum(res?.discount ?? 0));
+      const { discount, code } = await validateCouponCode(couponCode, subtotal);
+      setCouponCode(code);
+      setCouponDiscount(discount);
       setCouponApplied(true);
-    } catch (err: any) {
-      setCouponError(err.message ?? "Invalid coupon code");
+    } catch (err: unknown) {
+      setCouponError(err instanceof Error ? err.message : "Invalid coupon code");
       setCouponDiscount(0);
       setCouponApplied(false);
     } finally {

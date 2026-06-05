@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useI18n } from "../../lib/i18n-context";
-import { supabase } from "../../lib/supabase";
 import { homepageSectionDescription, homepageSectionLabel } from "../../lib/homepage-section-label";
+import type { HomepageSectionRow } from "../../lib/cache/public-data";
 
 interface HomepageSection {
   id: number;
@@ -66,26 +66,36 @@ function SectionCard({ section, lang }: { section: HomepageSection; lang: "en" |
   );
 }
 
-export function HomepageSections() {
+export function HomepageSections({
+  initialSections = [],
+}: {
+  initialSections?: HomepageSectionRow[];
+}) {
   const { lang, isRTL } = useI18n();
-  const [sections, setSections] = useState<HomepageSection[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sections, setSections] = useState<HomepageSection[]>(initialSections);
+  const [loading, setLoading] = useState(initialSections.length === 0);
   const [canScrollBack, setCanScrollBack] = useState(false);
   const [canScrollForward, setCanScrollForward] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (initialSections.length > 0) return;
+    let cancelled = false;
     async function load() {
+      const { supabase } = await import("../../lib/supabase");
       const { data } = await supabase
         .from("homepage_sections")
         .select("id, slug, name_en, name_ar, description_en, description_ar, image, sort_order")
         .eq("is_active", true)
         .order("sort_order");
-      setSections((data ?? []) as HomepageSection[]);
-      setLoading(false);
+      if (!cancelled) {
+        setSections((data ?? []) as HomepageSection[]);
+        setLoading(false);
+      }
     }
     load();
-  }, []);
+    return () => { cancelled = true; };
+  }, [initialSections.length]);
 
   const updateScrollButtons = useCallback(() => {
     const el = trackRef.current;

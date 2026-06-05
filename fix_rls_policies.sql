@@ -92,11 +92,37 @@ CREATE POLICY "orders_insert" ON public.orders
 CREATE POLICY "orders_update" ON public.orders
   FOR UPDATE USING (is_admin());
 
--- Step 9: order_items table
+-- Step 9: order_items table (owner or admin only)
 DROP POLICY IF EXISTS "order_items_select" ON public.order_items;
 DROP POLICY IF EXISTS "order_items_insert" ON public.order_items;
-CREATE POLICY "order_items_select" ON public.order_items FOR SELECT USING (true);
-CREATE POLICY "order_items_insert" ON public.order_items FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "order_items_update" ON public.order_items;
+DROP POLICY IF EXISTS "order_items_delete" ON public.order_items;
+CREATE POLICY "order_items_select" ON public.order_items FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM public.orders o
+    WHERE o.id = order_items.order_id
+      AND (o.user_id = auth.uid() OR is_admin())
+  )
+);
+CREATE POLICY "order_items_insert" ON public.order_items FOR INSERT WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.orders o
+    WHERE o.id = order_items.order_id
+      AND (o.user_id = auth.uid() OR is_admin())
+  )
+);
+CREATE POLICY "order_items_update" ON public.order_items FOR UPDATE USING (
+  EXISTS (
+    SELECT 1 FROM public.orders o
+    WHERE o.id = order_items.order_id AND is_admin()
+  )
+);
+CREATE POLICY "order_items_delete" ON public.order_items FOR DELETE USING (
+  EXISTS (
+    SELECT 1 FROM public.orders o
+    WHERE o.id = order_items.order_id AND is_admin()
+  )
+);
 
 -- Step 10: consultations table
 DROP POLICY IF EXISTS "consultations_select" ON public.consultations;
@@ -139,6 +165,28 @@ CREATE POLICY "Allow update in categories bucket"
 CREATE POLICY "Allow delete from categories bucket"
   ON storage.objects FOR DELETE
   USING (bucket_id = 'categories' AND is_admin());
+
+-- Step 13: products storage bucket (homepage sections, product images)
+DROP POLICY IF EXISTS "Admin upload products" ON storage.objects;
+DROP POLICY IF EXISTS "Public read products bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Allow upload to products bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Allow update in products bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Allow delete from products bucket" ON storage.objects;
+CREATE POLICY "Public read products bucket"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'products');
+CREATE POLICY "Allow upload to products bucket"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'products' AND is_admin());
+CREATE POLICY "Allow update in products bucket"
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'products' AND is_admin());
+CREATE POLICY "Allow delete from products bucket"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'products' AND is_admin());
+
+-- Step 14: settings table (public keys whitelist — run fix_settings_rls.sql for full DDL)
+-- See fix_settings_rls.sql if settings table policies are missing
 
 -- Done!
 SELECT 'RLS policies applied successfully' as status;

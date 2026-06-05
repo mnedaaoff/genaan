@@ -4,10 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "../../lib/cart-context";
 import { useI18n } from "../../lib/i18n-context";
-import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
+import { useState, useEffect, useMemo } from "react";
 import { productName } from "../../lib/product-label";
 import { computeListingPrice, formatListingPrice } from "../../lib/variant-pricing";
+import type { CatalogProductRow } from "../../lib/cache/public-data";
 
 interface Product {
   id: number;
@@ -27,16 +27,43 @@ interface Product {
   price_from?: boolean;
 }
 
-export function ProductsSection() {
+export function ProductsSection({
+  initialProducts = [],
+}: {
+  initialProducts?: CatalogProductRow[];
+}) {
   const { addItem } = useCart();
   const { t, lang, isRTL } = useI18n();
   const [added, setAdded] = useState<number | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rawProducts, setRawProducts] = useState<CatalogProductRow[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
+
+  const products = useMemo(() => {
+    return rawProducts.map(row => {
+      const listing = computeListingPrice(Number(row.price), row.product_variants ?? []);
+      return {
+        ...row,
+        name: productName(row, lang),
+        display_price: listing.amount,
+        price_from: listing.fromPrice,
+        price: listing.amount,
+      } as Product;
+    });
+  }, [rawProducts, lang]);
 
   useEffect(() => {
+    if (initialProducts.length > 0) {
+      setRawProducts(initialProducts);
+      setLoading(false);
+    }
+  }, [initialProducts]);
+
+  useEffect(() => {
+    if (initialProducts.length > 0) return;
+    let cancelled = false;
     async function fetchProducts() {
       try {
+        const { supabase } = await import("../../lib/supabase");
         const { data: bestRows } = await supabase
           .from("homepage_best_sellers")
           .select("product_id, sort_order")
@@ -45,8 +72,10 @@ export function ProductsSection() {
         const bestIds = (bestRows ?? []).map(r => r.product_id);
 
         if (bestIds.length === 0) {
-          setProducts([]);
-          setLoading(false);
+          if (!cancelled) {
+            setRawProducts([]);
+            setLoading(false);
+          }
           return;
         }
 
@@ -71,35 +100,29 @@ export function ProductsSection() {
           .in("id", bestIds)
           .eq("is_active", true);
 
-        if (error) {
-          console.warn("Products fetch error:", error.message);
-          setProducts([]);
-        } else {
-          const byId = new Map(
-            (data ?? []).map(row => {
-              const listing = computeListingPrice(Number(row.price), row.product_variants ?? []);
-              return [row.id, {
-                ...row,
-                name: productName(row, lang),
-                display_price: listing.amount,
-                price_from: listing.fromPrice,
-                price: listing.amount,
-              }];
-            })
-          );
-          const ordered = bestIds.map(id => byId.get(id)).filter(Boolean) as Product[];
-          setProducts(ordered);
+        if (!cancelled) {
+          if (error) {
+            console.warn("Products fetch error:", error.message);
+            setRawProducts([]);
+          } else {
+            const byId = new Map((data ?? []).map(row => [row.id, row as unknown as CatalogProductRow]));
+            const ordered = bestIds.map(id => byId.get(id)).filter(Boolean) as CatalogProductRow[];
+            setRawProducts(ordered);
+          }
+          setLoading(false);
         }
       } catch (err) {
         console.error(err);
-        setProducts([]);
-      } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setRawProducts([]);
+          setLoading(false);
+        }
       }
     }
 
     fetchProducts();
-  }, [lang]);
+    return () => { cancelled = true; };
+  }, [initialProducts.length]);
 
   const handleAdd = (p: Product) => {
     const imgUrl = p.product_images?.find(i => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null;

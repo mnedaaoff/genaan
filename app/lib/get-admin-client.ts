@@ -46,20 +46,13 @@ export async function getAdminClient(req: NextRequest): Promise<
     return { error: "Unauthorized", status: 401 };
   }
 
-  const userMeta = user.user_metadata ?? {};
-  const appMeta = user.app_metadata ?? {};
-  let isAdmin =
-    userMeta.is_admin === true || userMeta.role === "admin" ||
-    appMeta.is_admin === true || appMeta.role === "admin";
+  const { data: profile } = await userClient
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  if (!isAdmin) {
-    const { data: profile } = await userClient
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
-    if (profile?.is_admin === true) isAdmin = true;
-  }
+  let isAdmin = profile?.is_admin === true;
 
   if (!isAdmin) {
     const { data: roleRows } = await userClient

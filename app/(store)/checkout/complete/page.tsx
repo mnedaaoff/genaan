@@ -37,6 +37,16 @@ function CompleteContent() {
               status: "canceled"
             })
             .eq("id", orderId);
+        } else if (success === "true") {
+          setStatus("success");
+          // Update order payment status in database
+          await supabase
+            .from("orders")
+            .update({ 
+              payment_status: "paid",
+              status: "confirmed"
+            })
+            .eq("id", orderId);
         } else {
           setStatus("success");
         }

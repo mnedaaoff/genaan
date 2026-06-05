@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useRef } from "react";
-import { plantCareRequests } from "../../lib/api";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../lib/auth-context";
 
 const careGuides = [
   {
@@ -50,13 +51,14 @@ const careGuides = [
 ];
 
 export default function CarePage() {
-  const [message, setMessage]      = useState("");
-  const [image, setImage]          = useState<File | null>(null);
+  const { user } = useAuth();
+  const [message, setMessage] = useState("");
+  const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setPreview] = useState<string | null>(null);
-  const [loading, setLoading]      = useState(false);
-  const [success, setSuccess]      = useState(false);
-  const [error, setError]          = useState("");
-  const fileRef                    = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,13 +75,61 @@ export default function CarePage() {
     setLoading(true);
     setError("");
     try {
-      await plantCareRequests.submit(message, image ?? undefined);
+      let imageUrl = "";
+      if (image) {
+        const ext = image.name.split(".").pop() || "jpg";
+        const path = `consultations/plant-care-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("spaces").upload(path, image, { upsert: true });
+        if (uploadErr) {
+          throw new Error(`فشل رفع الصورة: ${uploadErr.message}`);
+        }
+        const { data: urlData } = supabase.storage.from("spaces").getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      }
+
+      let finalMessage = message.trim();
+      if (imageUrl) {
+        finalMessage += `\n\n||IMAGE_URLS:${imageUrl}||`;
+      }
+
+      let name = "Plant Care Guest";
+      let email = user?.email || "guest@genaan.app";
+
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name, last_name, email")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (profile) {
+          const full = `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim();
+          if (full) name = full;
+          if (profile.email) email = profile.email;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
+        name,
+        email,
+        message: `Plant Care Request:\n\n${finalMessage}`,
+        status: "pending",
+      };
+      if (user?.id) payload.user_id = user.id;
+
+      let { error: insertErr } = await supabase.from("consultations").insert(payload);
+      if (insertErr && insertErr.message.includes('column "user_id"')) {
+        delete payload.user_id;
+        const retry = await supabase.from("consultations").insert(payload);
+        insertErr = retry.error;
+      }
+      if (insertErr) throw new Error(insertErr.message);
+
       setSuccess(true);
       setMessage("");
       setImage(null);
       setPreview(null);
-    } catch (err: any) {
-      setError(err.message ?? "حدث خطأ، يرجى المحاولة مجددًا.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "حدث خطأ، يرجى المحاولة مجددًا.");
     } finally {
       setLoading(false);
     }
@@ -163,6 +213,7 @@ export default function CarePage() {
                 <h3 className="font-bold text-[#0d3a24] text-xl mb-2">تم الإرسال بنجاح!</h3>
                 <p className="text-[#5f786c] text-sm mb-6">سيتواصل معك فريقنا في أقرب وقت.</p>
                 <button
+                  type="button"
                   onClick={() => setSuccess(false)}
                   className="px-6 py-2.5 bg-[#17583a] text-white text-sm font-semibold rounded-xl hover:bg-[#195b36] transition-colors"
                 >
@@ -171,7 +222,6 @@ export default function CarePage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Image Upload */}
                 <div>
                   <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-2">
                     Plant Photo (Optional)
@@ -211,7 +261,6 @@ export default function CarePage() {
                   )}
                 </div>
 
-                {/* Message */}
                 <div>
                   <label className="block text-[10px] font-semibold tracking-[0.12em] uppercase text-[#5f786c] mb-2">
                     Describe the Problem *

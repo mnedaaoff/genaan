@@ -12,6 +12,7 @@ import { ProductSectionsPicker } from "../../../components/admin/ProductSections
 import { CareGuideEditor, careGuidePayload } from "../../../components/admin/CareGuideEditor";
 import { minVariantPrice, variantPrices } from "../../../lib/variant-pricing";
 import { saveProductSections, type HomepageSectionOption } from "../../../lib/product-sections";
+import { getAdminUploadHeaders } from "../../../lib/admin-auth";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -72,7 +73,11 @@ export default function NewProductPage() {
     fd.append("file", file);
     fd.append("bucket", "products");
     fd.append("path", `products/${productId}-${Date.now()}.${file.name.split(".").pop()}`);
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+    const res = await fetch("/api/admin/upload", {
+      method: "POST",
+      headers: await getAdminUploadHeaders(),
+      body: fd,
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? "Upload failed");
     return json.url as string;

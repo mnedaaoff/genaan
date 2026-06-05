@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { resolveIsAdmin } from "../../lib/admin-status";
 
 function AdminLoginForm() {
   const router = useRouter();
@@ -36,33 +37,7 @@ function AdminLoginForm() {
       if (authError) throw new Error(isRTL ? "بريد إلكتروني أو كلمة مرور غير صحيحة" : "Invalid email or password");
       if (!data.session) throw new Error("No session returned");
 
-      // Step 2: Check admin flag — check BOTH user_metadata and app_metadata
-      // raw_user_meta_data → user_metadata, raw_app_meta_data → app_metadata
-      let isAdmin = false;
-
-      const userMeta = data.session.user.user_metadata ?? {};
-      const appMeta  = data.session.user.app_metadata  ?? {};
-
-      if (
-        userMeta.is_admin === true || userMeta.role === "admin" ||
-        appMeta.is_admin  === true || appMeta.role  === "admin"
-      ) {
-        isAdmin = true;
-      }
-
-      // Check public.profiles table (correct table name)
-      if (!isAdmin) {
-        const { data: profile, error: dbErr } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", data.session.user.id)
-          .single();
-
-        if (!dbErr && profile?.is_admin === true) {
-          isAdmin = true;
-        }
-        // If dbErr (RLS or other), silently skip — rely on metadata only
-      }
+      const isAdmin = await resolveIsAdmin(data.session.user);
 
       if (!isAdmin) {
         await supabase.auth.signOut();

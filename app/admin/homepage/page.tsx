@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { getAdminAuthHeaders } from "../../lib/admin-auth";
+import { getAdminAuthHeaders, getAdminUploadHeaders } from "../../lib/admin-auth";
 import { homepageSectionLabel } from "../../lib/homepage-section-label";
 import { productName } from "../../lib/product-label";
 
@@ -44,6 +44,7 @@ export default function AdminHomepagePage() {
     name_en: "", name_ar: "", description_en: "", description_ar: "",
   });
   const [showAddForm, setShowAddForm] = useState(false);
+  const [uploadingSectionId, setUploadingSectionId] = useState<number | null>(null);
 
   useEffect(() => {
     const s = localStorage.getItem("genaan_lang");
@@ -102,15 +103,57 @@ export default function AdminHomepagePage() {
     }
   }
 
-  async function uploadSectionImage(sectionId: number, file: File) {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("bucket", "products");
-    fd.append("path", `homepage/section-${sectionId}-${Date.now()}.${file.name.split(".").pop()}`);
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? "Upload failed");
-    await apiPatch({ action: "update_section", id: sectionId, image: json.url });
+  async function uploadSectionImage(
+    sectionId: number,
+    file: File,
+    input?: HTMLInputElement | null,
+  ) {
+    setUploadingSectionId(sectionId);
+    setError("");
+    setSuccess("");
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("bucket", "products");
+      fd.append("path", `homepage/section-${sectionId}-${Date.now()}.${ext}`);
+
+      const uploadRes = await fetch("/api/admin/upload", {
+        method: "POST",
+        headers: await getAdminUploadHeaders(),
+        body: fd,
+      });
+      const uploadJson = await uploadRes.json();
+      if (!uploadRes.ok) {
+        throw new Error(uploadJson.error ?? (isRTL ? "فشل رفع الملف" : "Upload failed"));
+      }
+
+      const imageUrl = typeof uploadJson.url === "string" ? uploadJson.url : "";
+      if (!imageUrl) {
+        throw new Error(isRTL ? "لم يُرجع السيرفر رابط الصورة" : "Server did not return image URL");
+      }
+
+      const headers = await getAdminAuthHeaders();
+      const patchRes = await fetch("/api/admin/homepage", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ action: "update_section", id: sectionId, image: imageUrl }),
+      });
+      const patchJson = await patchRes.json();
+      if (!patchRes.ok) {
+        throw new Error(patchJson.error ?? (isRTL ? "فشل حفظ الصورة" : "Failed to save image"));
+      }
+
+      setSections(prev =>
+        prev.map(s => (s.id === sectionId ? { ...s, image: imageUrl } : s)),
+      );
+      setSuccess(isRTL ? "تم رفع الصورة" : "Image uploaded");
+      if (input) input.value = "";
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : (isRTL ? "فشل الرفع" : "Upload failed"));
+    } finally {
+      setUploadingSectionId(null);
+    }
   }
 
   const cls = "w-full px-3 py-2 rounded-lg border border-[#d4ded7] bg-[#f4f5f1] text-sm";
@@ -286,13 +329,24 @@ export default function AdminHomepagePage() {
                 {sec.image && (
                   <img src={sec.image} alt="" className="w-24 h-16 object-cover rounded-lg border border-[#e4ece7]" />
                 )}
-                <label className="cursor-pointer px-4 py-2 bg-[#f4f5f1] border border-[#d4ded7] rounded-lg text-xs font-bold text-[#17583a] hover:bg-[#e8f3ec]">
-                  {isRTL ? "رفع صورة" : "Upload image"}
-                  <input type="file" accept="image/*" className="hidden"
+                <label
+                  className={`cursor-pointer px-4 py-2 bg-[#f4f5f1] border border-[#d4ded7] rounded-lg text-xs font-bold text-[#17583a] hover:bg-[#e8f3ec] ${
+                    uploadingSectionId === sec.id ? "opacity-60 pointer-events-none" : ""
+                  }`}
+                >
+                  {uploadingSectionId === sec.id
+                    ? (isRTL ? "جاري الرفع…" : "Uploading…")
+                    : (isRTL ? "رفع صورة" : "Upload image")}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingSectionId === sec.id}
                     onChange={e => {
                       const f = e.target.files?.[0];
-                      if (f) uploadSectionImage(sec.id, f).catch(err => setError(err.message));
-                    }} />
+                      if (f) void uploadSectionImage(sec.id, f, e.target);
+                    }}
+                  />
                 </label>
               </div>
 

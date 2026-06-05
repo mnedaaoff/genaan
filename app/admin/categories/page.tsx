@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { getAdminAuthHeaders } from "../../lib/admin-auth";
+import { getAdminAuthHeaders, getAdminUploadHeaders } from "../../lib/admin-auth";
 import { categoryLabelBoth } from "../../lib/category-label";
 
 interface Category {
@@ -47,7 +47,11 @@ export default function AdminCategoriesPage() {
     fd.append("file", file);
     fd.append("bucket", "categories");
     fd.append("path", `categories/${categoryId}-${Date.now()}.${file.name.split(".").pop()}`);
-    const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+    const res = await fetch("/api/admin/upload", {
+      method: "POST",
+      headers: await getAdminUploadHeaders(),
+      body: fd,
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? "Upload failed");
     return json.url as string;

@@ -1,27 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { getAdminClient } from "../../../lib/get-admin-client";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const anonKey =
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-    if (!supabaseUrl) {
-      return NextResponse.json({ error: "Missing SUPABASE_URL" }, { status: 500 });
+    const admin = await getAdminClient(req);
+    if (!admin.client) {
+      return NextResponse.json({ error: admin.error }, { status: admin.status });
     }
-
-    const keyToUse = serviceKey || anonKey;
-    if (!keyToUse) {
-      return NextResponse.json({ error: "Missing Supabase key" }, { status: 500 });
-    }
-
-    // Admin client created at request-time — bypasses RLS via service key
-    const supabaseAdmin = createClient(supabaseUrl, keyToUse, {
-      auth: { persistSession: false },
-    });
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -39,12 +24,10 @@ export async function POST(req: NextRequest) {
       pathFromForm ||
       `products/${productId ?? "unknown"}-${Date.now()}.${ext}`;
 
-    // Convert File → Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 1. Upload to Supabase Storage (service key bypasses storage RLS)
-    const { error: uploadErr } = await supabaseAdmin.storage
+    const { error: uploadErr } = await admin.client.storage
       .from(bucket)
       .upload(filePath, buffer, {
         contentType: file.type || "application/octet-stream",
@@ -53,34 +36,28 @@ export async function POST(req: NextRequest) {
 
     if (uploadErr) {
       return NextResponse.json(
-        {
-          error: `Storage upload failed: ${uploadErr.message}`,
-          keyUsed: serviceKey ? "service_role" : "anon",
-        },
-        { status: 500 }
+        { error: `Storage upload failed: ${uploadErr.message}` },
+        { status: 500 },
       );
     }
 
-    const { data: urlData } = supabaseAdmin.storage
-      .from(bucket)
-      .getPublicUrl(filePath);
+    const { data: urlData } = admin.client.storage.from(bucket).getPublicUrl(filePath);
     const publicUrl = urlData.publicUrl;
 
-    // 2. Update product_images table server-side (service key bypasses table RLS)
     if (productId) {
       if (existingImageId) {
-        const { error: imgErr } = await supabaseAdmin
+        const { error: imgErr } = await admin.client
           .from("product_images")
           .update({ url: publicUrl })
           .eq("id", existingImageId);
         if (imgErr) {
           return NextResponse.json(
             { error: `product_images update failed: ${imgErr.message}` },
-            { status: 500 }
+            { status: 500 },
           );
         }
       } else {
-        const { error: imgErr } = await supabaseAdmin
+        const { error: imgErr } = await admin.client
           .from("product_images")
           .insert({
             product_id: Number(productId),
@@ -91,20 +68,17 @@ export async function POST(req: NextRequest) {
         if (imgErr) {
           return NextResponse.json(
             { error: `product_images insert failed: ${imgErr.message}` },
-            { status: 500 }
+            { status: 500 },
           );
         }
       }
     }
 
     return NextResponse.json({ url: publicUrl, path: filePath });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message ?? "Upload failed" },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Upload failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// Next.js App Router segment config
 export const dynamic = "force-dynamic";

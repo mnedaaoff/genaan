@@ -7,6 +7,7 @@ import { useCart } from "../../lib/cart-context";
 import { useAuth } from "../../lib/auth-context";
 import { useI18n } from "../../lib/i18n-context";
 import { supabase } from "../../lib/supabase";
+import { validateCouponCode, incrementCouponUsage } from "../../lib/coupons-client";
 
 const STEPS = ["Delivery", "Payment", "Review"] as const;
 type Step = typeof STEPS[number];
@@ -99,55 +100,18 @@ export default function CheckoutPage() {
     loadAddress();
   }, [user]);
 
-  // Apply coupon — direct Supabase query
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
     setCouponApplying(true);
     setCouponError("");
     try {
-      const code = couponCode.trim().toUpperCase();
-      const now = new Date().toISOString();
-
-      const { data: coupon, error: qErr } = await supabase
-        .from("coupons")
-        .select("*")
-        .eq("code", code)
-        .eq("is_active", true)
-        .single();
-
-      if (qErr || !coupon) throw new Error("Invalid coupon code");
-
-      // Check expiry
-      if (coupon.expires_at && coupon.expires_at < now) throw new Error("This coupon has expired");
-
-      // Check usage limit (old schema: max_uses / used_count)
-      const usageLimit = coupon.usage_limit ?? coupon.max_uses ?? null;
-      if (usageLimit && coupon.used_count >= usageLimit)
-        throw new Error("This coupon has reached its usage limit");
-
-      // Check minimum order (old schema: min_order)
-      const minOrder = coupon.minimum_order_amount ?? coupon.min_order ?? 0;
-      if (minOrder && subtotal < minOrder)
-        throw new Error(`Minimum order of EGP ${minOrder} required`);
-
-      // Calculate discount (old schema: discount_type / discount_value)
-      let discount = 0;
-      const discType = coupon.type ?? coupon.discount_type ?? "percent";
-      const discValue = coupon.value ?? coupon.discount_value ?? 0;
-      const isPercent = discType === "percent" || discType === "percentage";
-      if (isPercent) {
-        discount = (subtotal * discValue) / 100;
-        if (coupon.max_discount_amount) discount = Math.min(discount, coupon.max_discount_amount);
-      } else {
-        discount = discValue;
-      }
-      discount = Math.min(discount, subtotal); // can't exceed subtotal
-
+      const { discount, code } = await validateCouponCode(couponCode, subtotal);
+      setCouponCode(code);
       setCouponDiscount(discount);
       setCouponApplied(true);
       setCouponError("");
-    } catch (err: any) {
-      setCouponError(err.message ?? "Invalid coupon");
+    } catch (err: unknown) {
+      setCouponError(err instanceof Error ? err.message : "Invalid coupon");
       setCouponDiscount(0);
       setCouponApplied(false);
     } finally {
@@ -287,17 +251,8 @@ export default function CheckoutPage() {
       if (itemsErr) console.warn("Order items insert error:", itemsErr.message);
 
 
-      // 5. Increment coupon used_count if used
       if (couponApplied && couponCode) {
-        try {
-          const { error: rpcErr } = await supabase.rpc("increment_coupon_usage", { coupon_code: couponCode.toUpperCase() });
-          if (rpcErr) {
-            // RPC not available — do manual increment with raw SQL via update
-            await supabase.rpc("exec_sql", {
-              query: `UPDATE coupons SET used_count = used_count + 1 WHERE code = '${couponCode.toUpperCase()}'`
-            }).match(() => null); // truly best-effort
-          }
-        } catch { /* non-fatal */ }
+        await incrementCouponUsage(couponCode);
       }
 
       // 6. If not logged in, redirect to login

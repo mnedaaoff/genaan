@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { resolveIsAdmin } from "../lib/admin-status";
 import Link from "next/link";
 
 // SVG icon components for sidebar
@@ -100,26 +101,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return;
       }
 
-      // Check is_admin from BOTH user_metadata AND app_metadata
-      // (raw_app_meta_data → app_metadata, raw_user_meta_data → user_metadata)
-      const userMeta = session.user.user_metadata ?? {};
-      const appMeta  = session.user.app_metadata  ?? {};
-      let isAdmin =
-        userMeta.is_admin === true || userMeta.role === "admin" ||
-        appMeta.is_admin  === true || appMeta.role  === "admin";
-
-      if (!isAdmin) {
-        const { data: profile, error: dbErr } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", session.user.id)
-          .single();
-
-        if (!dbErr && profile?.is_admin === true) {
-          isAdmin = true;
-        }
-        // If dbErr, silently skip — rely on app_metadata only
-      }
+      const isAdmin = await resolveIsAdmin(session.user);
 
       if (!isAdmin) {
         await supabase.auth.signOut();

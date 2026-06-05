@@ -1,7 +1,8 @@
 -- ══════════════════════════════════════════════════════════════
---  Genaan Platform — Supabase Schema
---  Project: hybybaqjoivioinudefl
---  Run this in Supabase SQL Editor to set up all tables
+--  Genaan Platform — Supabase Schema (historical bootstrap snapshot)
+--  NOTE: Live DB may differ. Use fix_rls_policies.sql, add_*.sql, and
+--  migrations in repo root for consultations, homepage_sections, profiles, etc.
+--  Auth users live in auth.users; app profile data is in public.profiles (not users).
 -- ══════════════════════════════════════════════════════════════
 
 -- Enable UUID extension

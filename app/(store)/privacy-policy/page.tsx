@@ -1,27 +1,11 @@
-"use client";
+import { getCachedPublicSettings } from "../../lib/cache/public-data";
 
-import { useEffect, useState } from "react";
-import { settings as settingsApi } from "../../lib/api";
+export const revalidate = 600;
 
-export default function PrivacyPolicyPage() {
-  const [content, setContent] = useState<string>("Loading...");
-
-  useEffect(() => {
-    async function loadPolicy() {
-      try {
-        const res: any = await settingsApi.get();
-        const policySetting = res.find((s: any) => s.key === "privacy_policy");
-        if (policySetting && policySetting.value) {
-          setContent(policySetting.value);
-        } else {
-          setContent("Privacy Policy has not been set yet.");
-        }
-      } catch (e) {
-        setContent("Failed to load Privacy Policy.");
-      }
-    }
-    loadPolicy();
-  }, []);
+export default async function PrivacyPolicyPage() {
+  const settings = await getCachedPublicSettings(["privacy_policy"]);
+  const content = settings.privacy_policy?.trim()
+    || "Privacy Policy has not been set yet.";
 
   return (
     <div className="min-h-screen bg-[#f4f5f1] py-16 px-5">

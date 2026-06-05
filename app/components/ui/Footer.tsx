@@ -4,40 +4,57 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useI18n } from "../../lib/i18n-context";
-import { supabase } from "../../lib/supabase";
+export type FooterSocials = {
+  instagram: string;
+  facebook: string;
+  whatsapp: string;
+  telegram: string;
+};
 
-export function Footer() {
+const DEFAULT_SOCIALS: FooterSocials = {
+  instagram: "#",
+  facebook: "#",
+  whatsapp: "#",
+  telegram: "#",
+};
+
+export function Footer({ initialSocials }: { initialSocials?: FooterSocials }) {
   const { t, isRTL } = useI18n();
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
-  const [socials, setSocials] = useState({
-    instagram: "#",
-    facebook: "#",
-    whatsapp: "#",
-    telegram: "#",
-  });
+  const [socials, setSocials] = useState<FooterSocials>(initialSocials ?? DEFAULT_SOCIALS);
 
-  // Load social links from Supabase settings
   useEffect(() => {
+    if (initialSocials) {
+      setSocials(initialSocials);
+      return;
+    }
+    let cancelled = false;
     async function loadSettings() {
+      const { supabase } = await import("../../lib/supabase");
       const { data } = await supabase
         .from("settings")
         .select("key, value")
         .in("key", ["social_instagram", "social_facebook", "contact_whatsapp", "social_telegram"]);
 
-      if (data) {
+      if (!cancelled && data) {
         const map: Record<string, string> = {};
-        data.forEach((row: any) => { if (row.value) map[row.key] = row.value; });
+        data.forEach((row: { key: string; value: string | null }) => {
+          if (row.value) map[row.key] = row.value;
+        });
         setSocials({
-          instagram: map["social_instagram"] || "#",
-          facebook:  map["social_facebook"]  || "#",
-          whatsapp:  map["contact_whatsapp"] ? `https://wa.me/${map["contact_whatsapp"].replace(/\D/g, "")}` : "#",
-          telegram:  map["social_telegram"]  || "#",
+          instagram: map.social_instagram || "#",
+          facebook: map.social_facebook || "#",
+          whatsapp: map.contact_whatsapp
+            ? `https://wa.me/${map.contact_whatsapp.replace(/\D/g, "")}`
+            : "#",
+          telegram: map.social_telegram || "#",
         });
       }
     }
     loadSettings();
-  }, []);
+    return () => { cancelled = true; };
+  }, [initialSocials]);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
