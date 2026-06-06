@@ -145,7 +145,6 @@ export function PotPurchaseOptions({
 
   const [ownColor, setOwnColor] = useState("");
   const [ownSize, setOwnSize] = useState("");
-  const [wantPot, setWantPot] = useState(false);
   const [selectedPotId, setSelectedPotId] = useState<number | "">("");
   const [potColor, setPotColor] = useState("");
 
@@ -158,6 +157,25 @@ export function PotPurchaseOptions({
   const ownVariant = hasOwnVariants
     ? findVariantBySelection(variants, { color: ownColor, size: ownSize })
     : undefined;
+
+  // Helper to select a pot and automatically choose its first color option
+  const selectPotAndDefaultColor = (pot: PotProductOption) => {
+    setSelectedPotId(pot.id);
+    const colors = getVariantColors(pot.product_variants);
+    if (colors.length > 0) {
+      setPotColor(colors[0]);
+    } else {
+      setPotColor("");
+    }
+  };
+
+  // Auto-select the first pot and its first color option on component mount / load
+  useEffect(() => {
+    if (isPlant && potProducts.length > 0 && selectedPotId === "") {
+      const firstPot = potProducts[0];
+      selectPotAndDefaultColor(firstPot);
+    }
+  }, [isPlant, potProducts, selectedPotId]);
 
   useEffect(() => {
     let canAdd = true;
@@ -176,7 +194,7 @@ export function PotPurchaseOptions({
       }
     }
 
-    if (isPlant && wantPot) {
+    if (isPlant) {
       if (!selectedPot || !potColor || !potVariant) {
         canAdd = false;
       } else {
@@ -201,7 +219,7 @@ export function PotPurchaseOptions({
     onSelectionChange({ canAdd, totalPrice: unitPrice, variant, potAddon });
   }, [
     hasOwnVariants, variants, ownColor, ownSize, ownVariant, basePrice,
-    isPlant, wantPot, selectedPot, potColor, potVariant, autoSize, onSelectionChange,
+    isPlant, selectedPot, potColor, potVariant, autoSize, onSelectionChange,
   ]);
 
   const chip = (active: boolean) =>
@@ -225,81 +243,69 @@ export function PotPurchaseOptions({
         </div>
       )}
 
-      {isPlant && (
+      {isPlant && potProducts.length > 0 && (
         <div className="rounded-2xl border border-[#e4ece7] bg-white p-4 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-[#0d3a24]">{isRTL ? "إضافة قصيص" : "Add a pot"}</p>
-              <p className="text-xs text-[#8aab99] mt-0.5">
-                {isRTL
-                  ? `الحجم تلقائي (${potSizeLabel(autoSize, lang)}) — اختر النوع واللون`
-                  : `Auto size (${potSizeLabel(autoSize, lang)}) — pick type & color`}
-              </p>
-            </div>
-            <button type="button" onClick={() => setWantPot(v => !v)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${wantPot ? "bg-[#17583a]" : "bg-[#d4ded7]"}`}>
-              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${wantPot ? "start-5" : "start-0.5"}`} />
-            </button>
+          <div>
+            <p className="text-sm font-bold text-[#0d3a24]">{isRTL ? "اختر قصيصاً" : "Select a pot"}</p>
+            <p className="text-xs text-[#8aab99] mt-0.5">
+              {isRTL
+                ? `الحجم تلقائي (${potSizeLabel(autoSize, lang)}) — اختر النوع واللون`
+                : `Auto size (${potSizeLabel(autoSize, lang)}) — pick type & color`}
+            </p>
           </div>
-          {wantPot && (
-            <>
-              <p className="text-xs font-bold text-[#0d3a24] uppercase tracking-wide">
-                {isRTL ? "اختر القصيص" : "Choose a pot"}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {potProducts.map(p => {
-                  const img = potImageUrl(p);
-                  const active = selectedPotId === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => { setSelectedPotId(p.id); setPotColor(""); }}
-                      className={`rounded-xl border-2 overflow-hidden text-start transition-all ${
-                        active ? "border-[#17583a] ring-2 ring-[#17583a]/20" : "border-[#e4ece7] hover:border-[#17583a]/50"
-                      }`}
-                    >
-                      <div className="relative aspect-square bg-[#f4f5f1]">
-                        {img ? (
-                          <Image src={img} alt={p.name} fill className="object-cover" sizes="120px" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-2xl">🪴</div>
-                        )}
-                      </div>
-                      <p className="px-2 py-1.5 text-xs font-semibold text-[#0d3a24] line-clamp-2">{p.name}</p>
-                    </button>
-                  );
-                })}
-              </div>
 
-              {selectedPot && (
-                <div className="flex gap-4 items-start p-3 bg-[#f4f5f1] rounded-xl">
-                  {selectedPotImg && (
-                    <div className="relative w-20 h-20 rounded-lg overflow-hidden shrink-0 border border-[#e4ece7]">
-                      <Image src={selectedPotImg} alt={selectedPot.name} fill className="object-cover" sizes="80px" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-[#0d3a24]">{selectedPot.name}</p>
-                    <p className="text-xs text-[#8aab99] mt-0.5">
-                      {isRTL ? "اختر اللون:" : "Pick a color:"}
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {potColors.map(color => (
-                        <button key={color} type="button" onClick={() => setPotColor(color)} className={chip(potColor === color)}>
-                          {color}
-                        </button>
-                      ))}
-                    </div>
-                    {potColor && potVariant && (
-                      <p className="text-sm font-bold text-[#17583a] mt-2">
-                        + EGP {(potVariant.price ?? selectedPot.price).toFixed(2)}
-                      </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {potProducts.map(p => {
+              const img = potImageUrl(p);
+              const active = selectedPotId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectPotAndDefaultColor(p)}
+                  className={`rounded-xl border-2 overflow-hidden text-start transition-all ${
+                    active ? "border-[#17583a] ring-2 ring-[#17583a]/20" : "border-[#e4ece7] hover:border-[#17583a]/50"
+                  }`}
+                >
+                  <div className="relative aspect-square bg-[#f4f5f1]">
+                    {img ? (
+                      <Image src={img} alt={p.name} fill className="object-cover" sizes="120px" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-2xl">🪴</div>
                     )}
                   </div>
+                  <p className="px-2 py-1.5 text-xs font-semibold text-[#0d3a24] line-clamp-2">{p.name}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedPot && (
+            <div className="flex gap-4 items-start p-3 bg-[#f4f5f1] rounded-xl">
+              {selectedPotImg && (
+                <div className="relative w-20 h-20 rounded-lg overflow-hidden shrink-0 border border-[#e4ece7]">
+                  <Image src={selectedPotImg} alt={selectedPot.name} fill className="object-cover" sizes="80px" />
                 </div>
               )}
-            </>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-[#0d3a24]">{selectedPot.name}</p>
+                <p className="text-xs text-[#8aab99] mt-0.5">
+                  {isRTL ? "اختر اللون:" : "Pick a color:"}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {potColors.map(color => (
+                    <button key={color} type="button" onClick={() => setPotColor(color)} className={chip(potColor === color)}>
+                      {color}
+                    </button>
+                  ))}
+                </div>
+                {potColor && potVariant && (
+                  <p className="text-sm font-bold text-[#17583a] mt-2">
+                    + EGP {(potVariant.price ?? selectedPot.price).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
