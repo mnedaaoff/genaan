@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useCart } from "../../lib/cart-context";
 import { useAuth } from "../../lib/auth-context";
 import { useI18n } from "../../lib/i18n-context";
+import { supabase } from "../../lib/supabase";
 
 export function Navbar() {
   const { itemCount, openCart } = useCart();
@@ -26,8 +27,54 @@ export function Navbar() {
     const threshold = hero?.offsetHeight ?? window.innerHeight * 0.85;
     const handleScroll = () => setScrolled(window.scrollY > threshold);
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
   }, [isHome]);
+
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadNotificationsCount(0);
+      return;
+    }
+
+    const fetchUnreadCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("is_read", false);
+
+        if (!error && count !== null) {
+          setUnreadNotificationsCount(count);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch unread notifications count:", err);
+      }
+    };
+
+    fetchUnreadCount();
+
+    const channel = supabase
+      .channel(`user-notifications-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   return (
     <>
@@ -91,6 +138,27 @@ export function Navbar() {
               <i className="fa-solid fa-language text-sm" />
               {lang === "en" ? "AR" : "EN"}
             </button>
+
+            {/* Notifications Bell */}
+            {user && (
+              <Link
+                href="/account?tab=notifications"
+                className={[
+                  "relative w-10 h-10 flex items-center justify-center rounded-[6px] transition-colors",
+                  scrolled ? "hover:bg-[#f4f5f1] text-[#0d3a24]" : "text-white hover:bg-white/10",
+                ].join(" ")}
+                aria-label={isRTL ? "الإشعارات" : "Notifications"}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                    {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Cart */}
             <button
@@ -243,6 +311,27 @@ export function Navbar() {
               </span>
               <span className="text-xs text-[#8aab99]">{lang === "en" ? "AR" : "EN"}</span>
             </button>
+
+            {/* Notifications trigger (only if logged in) */}
+            {user && (
+              <Link
+                href="/account?tab=notifications"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#f4f5f1] text-[#0d3a24] font-bold text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  {isRTL ? "الإشعارات" : "Notifications"}
+                </span>
+                {unreadNotificationsCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Cart trigger */}
             <button

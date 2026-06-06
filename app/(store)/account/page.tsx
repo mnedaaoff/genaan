@@ -45,6 +45,16 @@ export default function AccountPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab === "orders" || tab === "addresses" || tab === "profile" || tab === "messages" || tab === "notifications") {
+        setActiveTab(tab);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (user) {
       const userId = user.id;
       // Fetch profile

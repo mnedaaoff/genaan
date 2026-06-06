@@ -27,12 +27,35 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const { error: uploadErr } = await admin.client.storage
+    let { error: uploadErr } = await admin.client.storage
       .from(bucket)
       .upload(filePath, buffer, {
         contentType: file.type || "application/octet-stream",
         upsert: true,
       });
+
+    // If the bucket doesn't exist yet, create it as public and retry once
+    if (uploadErr && uploadErr.message.toLowerCase().includes("not found")) {
+      const { error: bucketErr } = await admin.client.storage.createBucket(
+        bucket,
+        { public: true },
+      );
+      if (bucketErr && !bucketErr.message.toLowerCase().includes("already exists")) {
+        return NextResponse.json(
+          { error: `Failed to create storage bucket '${bucket}': ${bucketErr.message}` },
+          { status: 500 },
+        );
+      }
+
+      // Retry the upload after bucket creation
+      const { error: retryErr } = await admin.client.storage
+        .from(bucket)
+        .upload(filePath, buffer, {
+          contentType: file.type || "application/octet-stream",
+          upsert: true,
+        });
+      uploadErr = retryErr;
+    }
 
     if (uploadErr) {
       return NextResponse.json(
