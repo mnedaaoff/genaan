@@ -21,12 +21,6 @@ export async function getAdminClient(req: NextRequest): Promise<
     return { error: "Missing Supabase URL", status: 500 };
   }
 
-  if (serviceKey) {
-    return {
-      client: createClient(url, serviceKey, { auth: { persistSession: false } }),
-    };
-  }
-
   if (!anonKey) {
     return { error: "Missing Supabase key", status: 500 };
   }
@@ -48,11 +42,14 @@ export async function getAdminClient(req: NextRequest): Promise<
 
   const { data: profile } = await userClient
     .from("profiles")
-    .select("is_admin")
+    .select("is_admin, role, permissions")
     .eq("id", user.id)
     .maybeSingle();
 
-  let isAdmin = profile?.is_admin === true;
+  let isAdmin = 
+    profile?.is_admin === true || 
+    profile?.role === "admin" || 
+    profile?.role === "subadmin";
 
   if (!isAdmin) {
     const { data: roleRows } = await userClient
@@ -70,6 +67,13 @@ export async function getAdminClient(req: NextRequest): Promise<
 
   if (!isAdmin) {
     return { error: "Forbidden", status: 403 };
+  }
+
+  // If authorized and we have a service key, return service role client to bypass RLS.
+  if (serviceKey) {
+    return {
+      client: createClient(url, serviceKey, { auth: { persistSession: false } }),
+    };
   }
 
   return { client: userClient };

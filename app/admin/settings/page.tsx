@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { revalidateStorefrontCache } from "../../lib/revalidate-storefront";
 import { CACHE_TAGS } from "../../lib/cache/tags";
+import { getAdminAuthHeaders } from "../../lib/admin-auth";
 
 interface FAQ { id: number; question: string | null; answer: string | null; sort_order: number; }
 interface Setting { key: string; value: string | null; type: string; }
@@ -29,7 +30,7 @@ const SETTING_KEYS = (isRTL: boolean) => [
 ];
 
 export default function AdminSettingsPage() {
-  const [tab, setTab] = useState<"settings" | "faq" | "footer">("settings");
+  const [tab, setTab] = useState<"settings" | "faq" | "footer" | "subadmins">("settings");
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [faqs, setFaqs]         = useState<FAQ[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -43,6 +44,91 @@ export default function AdminSettingsPage() {
   const [footerSaving, setFooterSaving] = useState(false);
   const [lang, setLang]         = useState<"en" | "ar">("en");
   const isRTL = lang === "ar";
+
+  // Subadmins tab states
+  const [subadmins, setSubadmins] = useState<any[]>([]);
+  const [loadingSub, setLoadingSub] = useState(false);
+  const [subForm, setSubForm] = useState({
+    email: "", password: "", first_name: "", last_name: "", phone: "",
+    permissions: [] as string[]
+  });
+  const [subError, setSubError] = useState("");
+  const [subSuccess, setSubSuccess] = useState("");
+  const [subSaving, setSubSaving] = useState(false);
+  const [showSubForm, setShowSubForm] = useState(false);
+
+  const AVAILABLE_PERMISSIONS = [
+    { key: "orders", en: "Orders", ar: "الطلبات" },
+    { key: "messages", en: "Messages & Inquiries", ar: "الرسائل والاستفسارات" },
+    { key: "products", en: "Product Catalog", ar: "كتالوج المنتجات" },
+    { key: "blog", en: "Blog posts", ar: "المدونة" },
+    { key: "settings", en: "Settings & System", ar: "الإعدادات والنظام" },
+  ];
+
+  const fetchSubadmins = async () => {
+    setLoadingSub(true);
+    setSubError("");
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch("/api/admin/subadmins", { headers });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to fetch subadmins");
+      setSubadmins(json.subadmins || []);
+    } catch (err: any) {
+      setSubError(err.message);
+    } finally {
+      setLoadingSub(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === "subadmins") {
+      fetchSubadmins();
+    }
+  }, [tab]);
+
+  const handleCreateSubadmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubSaving(true);
+    setSubError("");
+    setSubSuccess("");
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch("/api/admin/subadmins", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(subForm),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to create subadmin");
+      
+      setSubSuccess(isRTL ? "✓ تم إنشاء حساب المشرف الفرعي بنجاح!" : "✓ Subadmin account created successfully!");
+      setSubForm({ email: "", password: "", first_name: "", last_name: "", phone: "", permissions: [] });
+      setShowSubForm(false);
+      fetchSubadmins();
+    } catch (err: any) {
+      setSubError(err.message);
+    } finally {
+      setSubSaving(false);
+    }
+  };
+
+  const handleDeleteSubadmin = async (id: string) => {
+    if (!confirm(isRTL ? "هل أنت متأكد من حذف هذا المشرف؟" : "Are you sure you want to delete this subadmin?")) return;
+    setSubError("");
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`/api/admin/subadmins?id=${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete subadmin");
+      fetchSubadmins();
+    } catch (err: any) {
+      setSubError(err.message);
+    }
+  };
 
   useEffect(() => {
     const s = localStorage.getItem("genaan_lang");
@@ -152,6 +238,7 @@ export default function AdminSettingsPage() {
           { key: "settings", label: isRTL ? "⚙️ إعدادات المتجر" : "⚙️ Store Settings" },
           { key: "footer",   label: isRTL ? "🔗 أقسام الفوتر"  : "🔗 Footer Sections" },
           { key: "faq",      label: isRTL ? "❓ الأسئلة الشائعة" : "❓ FAQ" },
+          { key: "subadmins", label: isRTL ? "👥 المشرفين الفرعيين" : "👥 Subadmins" },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as any)}
             className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === t.key ? "bg-[#0d3a24] text-white" : "text-[#5f786c] hover:text-[#0d3a24]"}`}>
@@ -291,6 +378,138 @@ export default function AdminSettingsPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* Subadmins tab */}
+      {tab === "subadmins" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-6 space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="font-bold text-[#0d3a24]">{isRTL ? "المشرفين الفرعيين" : "Subadmins Management"}</h2>
+              <p className="text-xs text-[#5f786c] mt-0.5">{isRTL ? "قم بإنشاء حسابات الموظفين وتحديد صلاحياتهم" : "Create subadmin staff accounts and manage their permissions"}</p>
+            </div>
+            {!showSubForm && (
+              <button onClick={() => setShowSubForm(true)} className="px-4 py-2 bg-[#17583a] text-white rounded-xl text-xs font-bold hover:bg-[#195b36] transition-colors">
+                + {isRTL ? "إضافة مشرف جديد" : "Add New Subadmin"}
+              </button>
+            )}
+          </div>
+
+          {subError && <div className="p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-xl border border-red-200">{subError}</div>}
+          {subSuccess && <div className="p-3 bg-green-50 text-green-700 text-xs font-semibold rounded-xl border border-green-200">{subSuccess}</div>}
+
+          {showSubForm && (
+            <form onSubmit={handleCreateSubadmin} className="p-5 bg-[#fafbf9] border border-[#f0f2ee] rounded-2xl space-y-4 max-w-2xl animate-fade-in">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold text-xs text-[#0d3a24] uppercase tracking-wide">{isRTL ? "إنشاء حساب موظف جديد" : "New Subadmin Profile"}</h3>
+                <button type="button" onClick={() => setShowSubForm(false)} className="text-[#8aab99] hover:text-[#0d3a24] text-xs">✕ {isRTL ? "إلغاء" : "Cancel"}</button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#0d3a24] mb-1 uppercase tracking-wide">{isRTL ? "الاسم الأول" : "First Name"}</label>
+                  <input type="text" value={subForm.first_name} onChange={e => setSubForm({...subForm, first_name: e.target.value})} className={inp} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#0d3a24] mb-1 uppercase tracking-wide">{isRTL ? "اسم العائلة" : "Last Name"}</label>
+                  <input type="text" value={subForm.last_name} onChange={e => setSubForm({...subForm, last_name: e.target.value})} className={inp} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#0d3a24] mb-1 uppercase tracking-wide">{isRTL ? "البريد الإلكتروني *" : "Email *"}</label>
+                  <input type="email" required value={subForm.email} onChange={e => setSubForm({...subForm, email: e.target.value})} className={inp} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#0d3a24] mb-1 uppercase tracking-wide">{isRTL ? "كلمة المرور *" : "Password *"}</label>
+                  <input type="password" required minLength={6} value={subForm.password} onChange={e => setSubForm({...subForm, password: e.target.value})} className={inp} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#0d3a24] mb-1 uppercase tracking-wide">{isRTL ? "الهاتف" : "Phone"}</label>
+                <input type="text" value={subForm.phone} onChange={e => setSubForm({...subForm, phone: e.target.value})} className={inp} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0d3a24] mb-2 uppercase tracking-wide">{isRTL ? "الصلاحيات المتاحة" : "Permissions List"}</label>
+                <div className="space-y-2 bg-white p-3.5 rounded-xl border border-[#d4ded7]">
+                  {AVAILABLE_PERMISSIONS.map(p => {
+                    const checked = subForm.permissions.includes(p.key);
+                    return (
+                      <label key={p.key} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[#0d3a24] hover:text-[#17583a] py-1">
+                        <input type="checkbox" checked={checked} onChange={e => {
+                          const next = e.target.checked 
+                            ? [...subForm.permissions, p.key]
+                            : subForm.permissions.filter(x => x !== p.key);
+                          setSubForm({...subForm, permissions: next});
+                        }} className="rounded text-[#17583a] focus:ring-[#17583a]" />
+                        <span>{isRTL ? p.ar : p.en}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button type="submit" disabled={subSaving || !subForm.email || !subForm.password} className="px-6 py-2.5 bg-[#17583a] text-white rounded-xl text-xs font-bold hover:bg-[#195b36] transition-colors disabled:opacity-50 flex items-center gap-2">
+                {subSaving && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                <span>{isRTL ? "✓ حفظ الحساب" : "✓ Save Account"}</span>
+              </button>
+            </form>
+          )}
+
+          {loadingSub ? (
+            <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-14 bg-[#f0f2ee] rounded-xl animate-pulse" />)}</div>
+          ) : subadmins.length === 0 ? (
+            <div className="text-center py-10 bg-[#fafbf9] border border-dashed border-[#d4ded7] rounded-2xl">
+              <p className="text-3xl mb-2">👥</p>
+              <p className="text-xs text-[#8aab99]">{isRTL ? "لا يوجد مشرفين فرعيين حالياً" : "No subadmins registered yet"}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-[#f0f2ee] rounded-xl">
+              <table className="w-full text-xs text-start">
+                <thead>
+                  <tr className="bg-[#fafbf9] border-b border-[#f0f2ee] text-[10px] font-bold text-[#5f786c] uppercase tracking-wider">
+                    <th className="px-4 py-2.5 text-start">{isRTL ? "الموظف" : "Staff Member"}</th>
+                    <th className="px-4 py-2.5 text-start">{isRTL ? "البريد الإلكتروني" : "Email"}</th>
+                    <th className="px-4 py-2.5 text-start">{isRTL ? "الصلاحيات" : "Permissions"}</th>
+                    <th className="px-4 py-2.5 text-center">{isRTL ? "إجراء" : "Action"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f4f5f1]">
+                  {subadmins.map(s => {
+                    const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || "—";
+                    return (
+                      <tr key={s.id} className="hover:bg-[#fafbf9]">
+                        <td className="px-4 py-3.5 font-bold text-[#0d3a24]">{name}</td>
+                        <td className="px-4 py-3.5 text-[#5f786c]">{s.email}</td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-wrap gap-1">
+                            {s.permissions && s.permissions.length > 0 ? (
+                              s.permissions.map((pKey: string) => {
+                                const pObj = AVAILABLE_PERMISSIONS.find(p => p.key === pKey);
+                                return (
+                                  <span key={pKey} className="px-2 py-0.5 rounded bg-[#e8f3ec] text-[#17583a] text-[10px] font-semibold uppercase tracking-wider">
+                                    {pObj ? (isRTL ? pObj.ar : pObj.en) : pKey}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-[10px] text-red-500 italic">{isRTL ? "لا توجد صلاحيات" : "No permissions"}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          <button onClick={() => handleDeleteSubadmin(s.id)} className="text-red-500 hover:text-red-700 font-bold">
+                            {isRTL ? "حذف" : "Delete"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
