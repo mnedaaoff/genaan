@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase";
-import { resolveIsAdmin } from "../lib/admin-status";
+import { resolveIsAdmin, resolveAdminPermissions } from "../lib/admin-status";
 import Link from "next/link";
 
 // SVG icon components for sidebar
@@ -42,6 +42,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [lang, setLang]           = useState<"en" | "ar">("en");
   const [adminEmail, setAdminEmail] = useState("");
+  const [adminRole, setAdminRole]   = useState<"admin" | "subadmin">("admin");
+  const [userPermissions, setUserPermissions] = useState<string[] | null>(null); // null = full admin
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [checking, setChecking]   = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -109,6 +111,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return;
       }
 
+      // Resolve permissions (null = full admin, string[] = subadmin)
+      const perms = await resolveAdminPermissions(session.user);
+      setUserPermissions(perms);
+      setAdminRole(perms === null ? "admin" : "subadmin");
+
       setAdminEmail(session.user.email ?? "Admin");
       setChecking(false);
     });
@@ -161,7 +168,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          {/* Dashboard */}
+          {/* Dashboard — always visible */}
           {NAV_ITEMS.filter(i => !i.section).map(item => (
             <Link key={item.href} href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-sm font-semibold mb-1
@@ -170,9 +177,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span>{isRTL ? item.ar : item.en}</span>
             </Link>
           ))}
-          {/* Grouped sections */}
+          {/* Grouped sections — filtered by permissions for subadmins */}
           {SECTIONS.map(section => {
-            const sectionItems = NAV_ITEMS.filter(i => i.section === section);
+            const sectionItems = NAV_ITEMS.filter(i => {
+              if (i.section !== section) return false;
+              // Full admins see everything
+              if (userPermissions === null) return true;
+              // Subadmins: map href to permission key
+              if (i.href === "/admin/orders")    return userPermissions.includes("orders");
+              if (i.href === "/admin/coupons")   return userPermissions.includes("orders");
+              if (i.href === "/admin/messages")  return userPermissions.includes("messages");
+              if (i.href === "/admin/spaces")    return userPermissions.includes("messages");
+              if (i.href === "/admin/customers") return userPermissions.includes("messages") || userPermissions.includes("orders");
+              if (i.href === "/admin/products")  return userPermissions.includes("products");
+              if (i.href === "/admin/homepage")  return userPermissions.includes("products");
+              if (i.href === "/admin/categories") return userPermissions.includes("products");
+              if (i.href === "/admin/posts")     return userPermissions.includes("blog");
+              if (i.href === "/admin/settings")  return userPermissions.includes("settings");
+              return false;
+            });
             if (!sectionItems.length) return null;
             return (
               <div key={section} className="mt-4">
@@ -207,7 +230,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div className="min-w-0">
               <p className="text-white text-xs font-semibold truncate">{adminEmail}</p>
-              <p className="text-white/40 text-[10px]">{isRTL ? "مدير النظام" : "System Admin"}</p>
+              <p className="text-white/40 text-[10px]">
+                {adminRole === "subadmin"
+                  ? (isRTL ? "مشرف فرعي" : "Subadmin")
+                  : (isRTL ? "مدير النظام" : "System Admin")
+                }
+              </p>
             </div>
           </div>
           <button
