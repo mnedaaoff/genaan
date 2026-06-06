@@ -18,11 +18,18 @@ const DEFAULT_SOCIALS: FooterSocials = {
   telegram: "#",
 };
 
+interface FooterSection { id: number; name_en: string; name_ar: string; slug: string; }
+
 export function Footer({ initialSocials }: { initialSocials?: FooterSocials }) {
   const { t, isRTL } = useI18n();
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
   const [socials, setSocials] = useState<FooterSocials>(initialSocials ?? DEFAULT_SOCIALS);
+  const [shopLinks, setShopLinks] = useState([
+    { label: t.footer.plants, href: "/shop?type=plant" },
+    { label: t.footer.pots,   href: "/shop?type=pot"   },
+    { label: t.footer.care,   href: "/care"            },
+  ]);
 
   useEffect(() => {
     if (initialSocials) {
@@ -35,7 +42,7 @@ export function Footer({ initialSocials }: { initialSocials?: FooterSocials }) {
       const { data } = await supabase
         .from("settings")
         .select("key, value")
-        .in("key", ["social_instagram", "social_facebook", "contact_whatsapp", "social_telegram"]);
+        .in("key", ["social_instagram", "social_facebook", "contact_whatsapp", "social_telegram", "footer_shop_sections"]);
 
       if (!cancelled && data) {
         const map: Record<string, string> = {};
@@ -50,22 +57,37 @@ export function Footer({ initialSocials }: { initialSocials?: FooterSocials }) {
             : "#",
           telegram: map.social_telegram || "#",
         });
+
+        // Load dynamic footer shop sections
+        if (map.footer_shop_sections) {
+          try {
+            const ids: number[] = JSON.parse(map.footer_shop_sections);
+            if (ids.length > 0) {
+              const { data: secs } = await supabase
+                .from("homepage_sections")
+                .select("id, name_en, name_ar, slug")
+                .in("id", ids);
+              if (secs && secs.length > 0) {
+                // Sort by the saved order
+                const ordered = ids.map(id => secs.find((s: FooterSection) => s.id === id)).filter(Boolean) as FooterSection[];
+                setShopLinks(ordered.map((s: FooterSection) => ({
+                  label: isRTL ? s.name_ar : s.name_en,
+                  href: `/shop?section=${s.slug}`,
+                })));
+              }
+            }
+          } catch {}
+        }
       }
     }
     loadSettings();
     return () => { cancelled = true; };
-  }, [initialSocials]);
+  }, [initialSocials, isRTL]);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
     if (email) { setSubscribed(true); setEmail(""); }
   };
-
-  const shopLinks = [
-    { label: t.footer.plants, href: "/shop?type=plant" },
-    { label: t.footer.pots,   href: "/shop?type=pot"   },
-    { label: t.footer.care,   href: "/care"            },
-  ];
 
   const aboutLinks = [
     { label: t.footer.our_story, href: "/about"   },

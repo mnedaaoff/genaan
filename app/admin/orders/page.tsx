@@ -74,9 +74,11 @@ export default function AdminOrdersPage() {
   const [orders, setOrders]       = useState<Order[]>([]);
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState("all");
+  const [payFilter, setPayFilter] = useState<"all" | "paid" | "failed" | "pending">("all");
   const [expanded, setExpanded]   = useState<Set<number>>(new Set());
   const [loadingItems, setLoadingItems] = useState<Set<number>>(new Set());
   const [lang, setLang]           = useState<"en" | "ar">("en");
+  const [newOrderToast, setNewOrderToast] = useState<{ number: string } | null>(null);
   const isRTL = lang === "ar";
 
   useEffect(() => {
@@ -97,16 +99,41 @@ export default function AdminOrdersPage() {
           profile:profiles ( first_name, last_name, email, phone ),
           address:addresses ( street, city, full_name, phone )
         `)
+        // Only show orders that have gone through payment flow
+        .not("payment_status", "eq", "pending")
         .order("created_at", { ascending: false });
 
       if (filter !== "all") q = q.eq("status", filter);
+      if (payFilter !== "all") q = q.eq("payment_status", payFilter);
       const { data, error } = await q;
       if (error) console.error("Orders fetch error:", error.message);
       setOrders((data ?? []) as unknown as Order[]);
       setLoading(false);
     }
     load();
-  }, [filter]);
+
+    // Real-time: notify when a new order with completed payment arrives
+    const channel = supabase
+      .channel("orders-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
+        const o = payload.new as any;
+        if (o.payment_status && o.payment_status !== "pending") {
+          load();
+          setNewOrderToast({ number: o.order_number ?? `#${String(o.id).slice(-6).toUpperCase()}` });
+          setTimeout(() => setNewOrderToast(null), 5000);
+        }
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, (payload) => {
+        const o = payload.new as any;
+        // When payment_status changes from pending to paid/failed, reload
+        if (o.payment_status && o.payment_status !== "pending") {
+          load();
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [filter, payFilter]);
 
   // Toggle expand + lazy-load items
   const toggleExpand = async (order: Order) => {
@@ -172,7 +199,40 @@ export default function AdminOrdersPage() {
           <h1 className="text-2xl font-black text-[#0d3a24]">{isRTL ? "الطلبات" : "Orders"}</h1>
           <p className="text-sm text-[#5f786c] mt-0.5">{isRTL ? "إدارة طلبات المتجر" : "Manage store orders"}</p>
         </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#8aab99] font-medium">{isRTL ? "حالة الدفع:" : "Payment filter:"}</span>
+          {(["all", "paid", "failed"] as const).map(p => (
+            <button key={p}
+              onClick={() => setPayFilter(p)}
+              className={`px-3 py-1.5 rounded-full font-semibold capitalize transition-colors ${
+                payFilter === p ? "bg-[#0d3a24] text-white" : "bg-white text-[#5f786c] border border-[#d4ded7] hover:border-[#17583a]"
+              }`}>
+              {isRTL
+                ? (p === "all" ? "الكل" : p === "paid" ? "مدفوع" : "فشل الدفع")
+                : p
+              }
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* New order toast */}
+      {newOrderToast && (
+        <div className="fixed bottom-6 end-6 z-[100] animate-slide-up">
+          <div className="bg-[#0d3a24] text-white rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-4 min-w-[280px]">
+            <div className="w-10 h-10 bg-[#17583a] rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm">{isRTL ? "طلب جديد!" : "New Order!"}</p>
+              <p className="text-white/70 text-xs">{newOrderToast.number}</p>
+            </div>
+            <button onClick={() => setNewOrderToast(null)} className="text-white/50 hover:text-white transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quick stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">

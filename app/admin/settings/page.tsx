@@ -7,6 +7,7 @@ import { CACHE_TAGS } from "../../lib/cache/tags";
 
 interface FAQ { id: number; question: string | null; answer: string | null; sort_order: number; }
 interface Setting { key: string; value: string | null; type: string; }
+interface Section { id: number; slug: string; name_en: string; name_ar: string; }
 
 const SETTING_KEYS = (isRTL: boolean) => [
   { key: "contact_email",    label: isRTL ? "البريد الإلكتروني للتواصل" : "Contact Email",     icon: "📧", type: "email" },
@@ -28,15 +29,18 @@ const SETTING_KEYS = (isRTL: boolean) => [
 ];
 
 export default function AdminSettingsPage() {
-  const [tab, setTab] = useState<"settings" | "faq">("settings");
+  const [tab, setTab] = useState<"settings" | "faq" | "footer">("settings");
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [faqs, setFaqs]         = useState<FAQ[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [footerSectionIds, setFooterSectionIds] = useState<number[]>([]);
   const [loadingS, setLoadingS] = useState(true);
   const [loadingF, setLoadingF] = useState(true);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [faqForm, setFaqForm]   = useState({ question: "", answer: "" });
   const [faqSaving, setFaqSaving] = useState(false);
+  const [footerSaving, setFooterSaving] = useState(false);
   const [lang, setLang]         = useState<"en" | "ar">("en");
   const isRTL = lang === "ar";
 
@@ -51,10 +55,24 @@ export default function AdminSettingsPage() {
       if (data) {
         const map = data.reduce((acc: any, row: any) => ({ ...acc, [row.key]: row.value ?? "" }), {});
         setSettings(map);
+        // Load footer section ids from settings
+        if (map.footer_shop_sections) {
+          try { setFooterSectionIds(JSON.parse(map.footer_shop_sections)); } catch {}
+        }
       }
       setLoadingS(false);
     }
     loadSettings();
+
+    async function loadSections() {
+      const { data } = await supabase
+        .from("homepage_sections")
+        .select("id, slug, name_en, name_ar")
+        .eq("is_active", true)
+        .order("sort_order");
+      if (data) setSections(data as Section[]);
+    }
+    loadSections();
   }, []);
 
   useEffect(() => {
@@ -78,6 +96,29 @@ export default function AdminSettingsPage() {
       await revalidateStorefrontCache(CACHE_TAGS.settings);
     } catch (err) { console.error(err); }
     setSaving(false);
+  };
+
+  const saveFooterSections = async () => {
+    if (footerSectionIds.length !== 3) {
+      alert(isRTL ? "يجب اختيار 3 أقسام بالضبط" : "Please select exactly 3 sections");
+      return;
+    }
+    setFooterSaving(true);
+    await supabase.from("settings").upsert(
+      { key: "footer_shop_sections", value: JSON.stringify(footerSectionIds), type: "json", updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+    await revalidateStorefrontCache(CACHE_TAGS.settings);
+    setFooterSaving(false);
+    alert(isRTL ? "✓ تم حفظ أقسام الفوتر" : "✓ Footer sections saved!");
+  };
+
+  const toggleFooterSection = (id: number) => {
+    setFooterSectionIds(prev =>
+      prev.includes(id)
+        ? prev.filter(x => x !== id)
+        : prev.length < 3 ? [...prev, id] : prev
+    );
   };
 
   const addFaq = async (e: React.FormEvent) => {
@@ -109,6 +150,7 @@ export default function AdminSettingsPage() {
       <div className="flex gap-2 mb-6 bg-white rounded-xl p-1.5 shadow-sm border border-[#f0f2ee] w-fit">
         {[
           { key: "settings", label: isRTL ? "⚙️ إعدادات المتجر" : "⚙️ Store Settings" },
+          { key: "footer",   label: isRTL ? "🔗 أقسام الفوتر"  : "🔗 Footer Sections" },
           { key: "faq",      label: isRTL ? "❓ الأسئلة الشائعة" : "❓ FAQ" },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as any)}
@@ -148,6 +190,50 @@ export default function AdminSettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Footer Sections tab */}
+      {tab === "footer" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#f0f2ee] p-6">
+          <h2 className="font-bold text-[#0d3a24] mb-2">{isRTL ? "أقسام Shop في الفوتر" : "Shop Sections in Footer"}</h2>
+          <p className="text-sm text-[#5f786c] mb-5">
+            {isRTL
+              ? "اختر 3 أقسام بالضبط لإظهارها في قائمة Shop بالفوتر"
+              : "Pick exactly 3 sections to show under Shop in the footer"}
+          </p>
+          <div className="flex items-center gap-2 mb-4 text-xs font-semibold">
+            <span className={footerSectionIds.length === 3 ? "text-green-600" : "text-amber-600"}>
+              {footerSectionIds.length}/3 {isRTL ? "مختار" : "selected"}
+            </span>
+          </div>
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+            {sections.map(sec => {
+              const selected = footerSectionIds.includes(sec.id);
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={() => toggleFooterSection(sec.id)}
+                  className={`px-4 py-3 rounded-xl border-2 text-sm font-semibold text-start transition-all ${
+                    selected
+                      ? "border-[#17583a] bg-[#e8f3ec] text-[#0d3a24]"
+                      : "border-[#d4ded7] bg-[#f4f5f1] text-[#5f786c] hover:border-[#17583a]"
+                  }`}
+                >
+                  <span className="me-1">{selected ? "✓" : "○"}</span>
+                  {isRTL ? sec.name_ar : sec.name_en}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={saveFooterSections}
+            disabled={footerSaving || footerSectionIds.length !== 3}
+            className="px-8 py-2.5 bg-[#0d3a24] text-white rounded-xl text-sm font-bold hover:bg-[#17583a] transition-colors disabled:opacity-50 shadow-sm"
+          >
+            {footerSaving ? (isRTL ? "جارٍ الحفظ..." : "Saving…") : (isRTL ? "✓ حفظ الفوتر" : "✓ Save Footer")}
+          </button>
         </div>
       )}
 

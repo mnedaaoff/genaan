@@ -231,7 +231,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* ── Main content ─────────────────────────────────────── */}
-      <div className="flex-1 md:ms-64 flex flex-col min-h-screen">
+      <div className="flex-1 md:ps-64 flex flex-col min-h-screen">
         {/* Top bar */}
         <header className="h-16 bg-white border-b border-[#e4ece7] flex items-center px-5 gap-4 sticky top-0 z-30 shadow-sm">
           <button

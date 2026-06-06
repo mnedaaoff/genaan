@@ -198,6 +198,7 @@ export const getCachedPosts = unstable_cache(
     const { data, error } = await sb
       .from("posts")
       .select("id, title, content, image, slug, created_at")
+      .eq("is_published", true)
       .order("created_at", { ascending: false });
     if (error) {
       console.error("getCachedPosts:", error.message);

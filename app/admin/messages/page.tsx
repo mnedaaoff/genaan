@@ -81,12 +81,17 @@ export default function AdminMessagesPage() {
         return;
       }
 
-      const { error } = await supabase.from("notifications").insert({
+      const notifPayload: Record<string, unknown> = {
         user_id: finalUserId,
         title: isRTL ? `رد على رسالتك / استفسارك` : `Reply to your message / inquiry`,
-        message: replyText.trim(),
         is_read: false,
-      });
+      };
+      // Support both 'message' and 'body' column names across schema versions
+      // We'll try inserting with 'body'; if schema uses 'message' it'll also be set
+      notifPayload.body = replyText.trim();
+      notifPayload.message = replyText.trim();
+
+      const { error } = await supabase.from("notifications").insert(notifPayload);
 
       if (error) throw error;
       alert(isRTL ? "تم إرسال الرد كإشعار للمستخدم بنجاح!" : "Reply sent as a notification to the user successfully!");
