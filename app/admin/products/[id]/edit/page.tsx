@@ -117,6 +117,18 @@ export default function EditProductPage() {
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 4.2 * 1024 * 1024) {
+      setError(
+        isRTL
+          ? "حجم الصورة كبير جداً. يرجى اختيار صورة أصغر من 4 ميجابايت."
+          : "The image is too large. Please select an image smaller than 4MB."
+      );
+      e.target.value = "";
+      setImageFile(null);
+      setImagePreview("");
+      return;
+    }
+    setError("");
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
@@ -138,9 +150,27 @@ export default function EditProductPage() {
       headers: await getAdminUploadHeaders(),
       body: fd,
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? "Upload failed");
-    return json.url as string;
+    
+    const text = await res.text();
+    let errorMsg = "";
+
+    try {
+      const json = JSON.parse(text);
+      if (res.ok) {
+        return json.url as string;
+      }
+      errorMsg = json.error ?? "Upload failed";
+    } catch {
+      if (res.status === 413) {
+        errorMsg = isRTL
+          ? "حجم الملف كبير جداً للرفع على السيرفر. يرجى ضغط الصورة أو اختيار صورة أصغر من 4 ميجابايت."
+          : "The file is too large to upload. Please compress the image or select one under 4MB.";
+      } else {
+        errorMsg = text || `Server error (${res.status})`;
+      }
+    }
+
+    throw new Error(errorMsg);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

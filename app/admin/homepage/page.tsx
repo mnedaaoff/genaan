@@ -123,12 +123,31 @@ export default function AdminHomepagePage() {
         headers: await getAdminUploadHeaders(),
         body: fd,
       });
-      const uploadJson = await uploadRes.json();
-      if (!uploadRes.ok) {
-        throw new Error(uploadJson.error ?? (isRTL ? "فشل رفع الملف" : "Upload failed"));
+      
+      const uploadText = await uploadRes.text();
+      let uploadError = "";
+      let imageUrl = "";
+
+      try {
+        const uploadJson = JSON.parse(uploadText);
+        if (uploadRes.ok) {
+          imageUrl = typeof uploadJson.url === "string" ? uploadJson.url : "";
+        } else {
+          uploadError = uploadJson.error ?? (isRTL ? "فشل رفع الملف" : "Upload failed");
+        }
+      } catch {
+        if (uploadRes.status === 413) {
+          uploadError = isRTL
+            ? "حجم الملف كبير جداً للرفع على السيرفر. الحد الأقصى هو 4 ميجابايت."
+            : "The file is too large to upload. The maximum limit is 4MB.";
+        } else {
+          uploadError = uploadText || `Server error (${uploadRes.status})`;
+        }
       }
 
-      const imageUrl = typeof uploadJson.url === "string" ? uploadJson.url : "";
+      if (uploadError) {
+        throw new Error(uploadError);
+      }
       if (!imageUrl) {
         throw new Error(isRTL ? "لم يُرجع السيرفر رابط الصورة" : "Server did not return image URL");
       }
@@ -344,7 +363,14 @@ export default function AdminHomepagePage() {
                     disabled={uploadingSectionId === sec.id}
                     onChange={e => {
                       const f = e.target.files?.[0];
-                      if (f) void uploadSectionImage(sec.id, f, e.target);
+                      if (!f) return;
+                      if (f.size > 4.2 * 1024 * 1024) {
+                        setError(isRTL ? "حجم الصورة كبير جداً. الحد الأقصى 4 ميجابايت." : "Image file too large. Max limit is 4MB.");
+                        e.target.value = "";
+                        return;
+                      }
+                      setError("");
+                      void uploadSectionImage(sec.id, f, e.target);
                     }}
                   />
                 </label>

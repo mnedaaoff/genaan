@@ -57,9 +57,27 @@ export default function AdminPostsPage() {
       headers: await getAdminUploadHeaders(),
       body: fd,
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? "Upload failed");
-    return json.url as string;
+
+    const text = await res.text();
+    let errorMsg = "";
+
+    try {
+      const json = JSON.parse(text);
+      if (res.ok) {
+        return json.url as string;
+      }
+      errorMsg = json.error ?? "Upload failed";
+    } catch {
+      if (res.status === 413) {
+        errorMsg = isRTL
+          ? "حجم الملف كبير جداً للرفع على السيرفر. يرجى ضغط الصورة أو اختيار صورة أصغر من 4 ميجابايت."
+          : "The file is too large to upload. Please compress the image or select one under 4MB.";
+      } else {
+        errorMsg = text || `Server error (${res.status})`;
+      }
+    }
+
+    throw new Error(errorMsg);
   };
 
   const makeSlug = (title: string) =>
@@ -197,7 +215,17 @@ export default function AdminPostsPage() {
                   </div>
                   <input id="post-img" type="file" accept="image/*" className="hidden" onChange={e => {
                     const f = e.target.files?.[0];
-                    if (f) { setImageFile(f); setImagePreview(URL.createObjectURL(f)); }
+                    if (!f) return;
+                    if (f.size > 4.2 * 1024 * 1024) {
+                      setFormError(isRTL ? "حجم الصورة كبير جداً. يرجى اختيار صورة أصغر من 4 ميجابايت." : "The image is too large. Please select an image smaller than 4MB.");
+                      e.target.value = "";
+                      setImageFile(null);
+                      setImagePreview("");
+                      return;
+                    }
+                    setFormError("");
+                    setImageFile(f);
+                    setImagePreview(URL.createObjectURL(f));
                   }} />
                 </label>
               </div>
